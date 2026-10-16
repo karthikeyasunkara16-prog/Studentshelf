@@ -1,4 +1,4 @@
-const CACHE_NAME = 'studentshelf-v2';
+const CACHE_NAME = 'studentshelf-v4';
 const STATIC_ASSETS = [
   '/',
   '/index.html',
@@ -6,7 +6,12 @@ const STATIC_ASSETS = [
   '/app.js',
   '/manifest.json',
   '/icon-512.png',
+  '/icon-192.png',
   '/icon.png',
+  '/favicon.png',
+  '/favicon.ico',
+  '/logo.svg',
+  '/logo.png',
   '/badge.png',
   'https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css',
   'https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap'

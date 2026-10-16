@@ -228,23 +228,32 @@ img { max-width: 100%; display: block; }
 }
 
 .brand-logo-icon {
-  width: 28px !important;
-  height: 28px !important;
-  min-width: 28px !important;
-  min-height: 28px !important;
-  border-radius: 8px !important;
+  width: 32px !important;
+  height: 32px !important;
+  min-width: 32px !important;
+  min-height: 32px !important;
+  border-radius: 9px !important;
   display: flex !important;
   align-items: center !important;
   justify-content: center !important;
-  box-shadow: 0 3px 10px rgba(0, 171, 228, 0.3), 0 1px 3px rgba(0, 171, 228, 0.15) !important;
+  background: #0F1427 !important;
+  box-shadow: 0 3px 12px rgba(0, 171, 228, 0.35), 0 1px 3px rgba(15, 20, 39, 0.2) !important;
   transition: all 0.25s ease !important;
   overflow: hidden !important;
   flex-shrink: 0 !important;
 }
 
 .top-nav-brand:hover .brand-logo-icon {
-  box-shadow: 0 5px 16px rgba(0, 171, 228, 0.45), 0 2px 4px rgba(0, 171, 228, 0.2) !important;
-  transform: scale(1.05) !important;
+  box-shadow: 0 6px 18px rgba(0, 171, 228, 0.5), 0 2px 6px rgba(15, 20, 39, 0.3) !important;
+  transform: scale(1.06) !important;
+}
+
+.brand-logo-img {
+  width: 100% !important;
+  height: 100% !important;
+  object-fit: cover !important;
+  display: block !important;
+  border-radius: 9px !important;
 }
 
 .brand-svg-emblem {
@@ -5216,15 +5225,11 @@ footer { border-top: 1px solid var(--border); background: var(--surface); paddin
   }
 
   .top-nav-brand .brand-logo-icon {
-    width: 24px !important;
-    height: 24px !important;
-    min-width: 24px !important;
-    min-height: 24px !important;
-  }
-
-  .top-nav-brand .brand-svg-emblem {
-    width: 24px !important;
-    height: 24px !important;
+    width: 28px !important;
+    height: 28px !important;
+    min-width: 28px !important;
+    min-height: 28px !important;
+    border-radius: 7px !important;
   }
 
   /* Compact Search Bar trigger in mobile header */
