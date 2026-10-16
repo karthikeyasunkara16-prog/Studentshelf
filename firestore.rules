@@ -1,0 +1,74 @@
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+
+    // Helper functions
+    function isAuthenticated() {
+      return request.auth != null;
+    }
+
+    // 1. User Profiles
+    // Anyone can read profiles so buyers can see seller name & WhatsApp
+    // Strictly authenticated users can create or modify profile records
+    match /users/{userId} {
+      allow read: if true;
+      allow create, update: if isAuthenticated();
+      allow delete: if isAuthenticated() && (
+        request.auth.uid == userId || 
+        request.auth.uid == resource.data.uid ||
+        request.auth.uid == resource.data.authUid
+      );
+    }
+
+    // 2. Marketplace Listings
+    // Read access is open for all campus students/guests to browse items
+    // Only authenticated students can publish, update, or remove listings
+    match /listings/{listingId} {
+      allow read: if true;
+      allow create: if isAuthenticated();
+      allow update, delete: if isAuthenticated() && (
+        resource.data.sellerId == request.auth.uid ||
+        resource.data.uid == request.auth.uid
+      );
+    }
+
+    // 3. Direct Peer Chats & Negotiations
+    // Restricted strictly to authenticated users
+    match /chats/{chatId} {
+      allow read, write: if isAuthenticated();
+
+      match /messages/{messageId} {
+        allow read, write: if isAuthenticated();
+      }
+    }
+
+    // 4. Campus Item Requests
+    // Publicly visible for buyers and sellers
+    // Only authenticated students can create or resolve requests
+    match /requests/{requestId} {
+      allow read: if true;
+      allow create, update: if isAuthenticated();
+      allow delete: if isAuthenticated() && (
+        resource.data.requesterId == request.auth.uid || 
+        resource.data.uid == request.auth.uid
+      );
+    }
+
+    // 5. In-App Notifications
+    match /notifications/{notificationId} {
+      allow read, write: if isAuthenticated();
+    }
+
+    // 6. Cross-Device Pending Email Verifications
+    // Unauthenticated Device A creates/listens, Device B updates before account creation
+    match /pendingVerifications/{emailDoc} {
+      allow read, write: if true;
+    }
+
+    // 7. Background Trigger Email Queue
+    match /mail/{mailId} {
+      allow read: if isAuthenticated();
+      allow create: if true;
+    }
+  }
+}
