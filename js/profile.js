@@ -728,19 +728,86 @@ function showEditProfileModal(currentProfile, dashboardContainer) {
 
     document.body.insertAdjacentHTML('beforeend', modalHtml);
     const modal = document.getElementById(modalId);
+
+    // Field-level validation helpers for Edit Profile
+    const setProfileFieldError = (fieldEl, message, anchorEl = null) => {
+        if (!fieldEl) return;
+        fieldEl.classList.add('is-invalid');
+        const targetAnchor = anchorEl || fieldEl;
+        const parent = targetAnchor.parentElement;
+        if (parent) {
+            const existing = parent.querySelector(`.field-error-hint[data-for="${fieldEl.id || 'field'}"]`);
+            if (existing) existing.remove();
+            const hint = document.createElement('div');
+            hint.className = 'field-error-hint';
+            hint.setAttribute('data-for', fieldEl.id || 'field');
+            hint.innerHTML = `<i class="fa-solid fa-circle-exclamation"></i> <span>${message}</span>`;
+            targetAnchor.insertAdjacentElement('afterend', hint);
+        }
+    };
+
+    const clearProfileFieldError = (fieldEl, anchorEl = null) => {
+        if (!fieldEl) return;
+        fieldEl.classList.remove('is-invalid');
+        const targetAnchor = anchorEl || fieldEl;
+        const parent = targetAnchor.parentElement;
+        if (parent) {
+            const hint = parent.querySelector(`.field-error-hint[data-for="${fieldEl.id || 'field'}"]`);
+            if (hint) hint.remove();
+        }
+    };
+
+    const nameInput = modal.querySelector('#edit-name');
+    const collegeIdInput = modal.querySelector('#edit-college-id');
+    const waInput = modal.querySelector('#edit-whatsapp');
+
+    nameInput.addEventListener('input', () => clearProfileFieldError(nameInput));
+    collegeIdInput.addEventListener('input', () => clearProfileFieldError(collegeIdInput));
+    waInput.addEventListener('input', () => clearProfileFieldError(waInput, waInput.parentElement));
     
     modal.querySelector('#cancel-edit-btn').addEventListener('click', () => modal.remove());
 
     modal.querySelector('#save-profile-btn').addEventListener('click', async () => {
-        const name = modal.querySelector('#edit-name').value.trim();
-        const collegeId = modal.querySelector('#edit-college-id').value.trim();
-        const rawWa = modal.querySelector('#edit-whatsapp').value.trim();
         const errorDiv = modal.querySelector('#edit-error');
         const saveBtn = modal.querySelector('#save-profile-btn');
 
-        if (!name) return errorDiv.textContent = "Please enter a name.";
-        if (rawWa.length !== 10 || !/^\d+$/.test(rawWa)) {
-            return errorDiv.textContent = "WhatsApp number must be exactly 10 digits.";
+        errorDiv.textContent = "";
+        clearProfileFieldError(nameInput);
+        clearProfileFieldError(collegeIdInput);
+        clearProfileFieldError(waInput, waInput.parentElement);
+
+        const name = nameInput.value.trim();
+        const collegeId = collegeIdInput.value.trim();
+        const rawWa = waInput.value.trim();
+
+        let hasError = false;
+        let firstInvalid = null;
+
+        const markInvalid = (el, msg, anchor = null) => {
+            setProfileFieldError(el, msg, anchor);
+            hasError = true;
+            if (!firstInvalid) firstInvalid = el;
+        };
+
+        if (!name) {
+            markInvalid(nameInput, 'Display Name is required');
+        }
+        if (!collegeId) {
+            markInvalid(collegeIdInput, 'College Roll Number is required');
+        }
+        const cleanedWa = rawWa.replace(/\D/g, '');
+        if (!rawWa) {
+            markInvalid(waInput, 'WhatsApp Number is required', waInput.parentElement);
+        } else if (cleanedWa.length !== 10) {
+            markInvalid(waInput, 'WhatsApp number must be exactly 10 digits', waInput.parentElement);
+        }
+
+        if (hasError) {
+            if (firstInvalid) {
+                firstInvalid.scrollIntoView({ behavior: 'smooth', block: 'center' });
+                firstInvalid.focus();
+            }
+            return;
         }
 
         try {

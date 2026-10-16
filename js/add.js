@@ -9,10 +9,6 @@ export async function showAddListingModal() {
         window.location.hash = '#/login';
         return;
     }
-    if (!isUserVerified(user)) {
-        showVerificationRequiredPrompt("Verify your college email to start buying and selling on campus.");
-        return;
-    }
 
     // Modal ID and cleanup
     const modalId = 'add-listing-modal';
@@ -139,6 +135,48 @@ export async function showAddListingModal() {
     const addForm = modal.querySelector('#add-form');
     const addBtn = modal.querySelector('#add-btn');
     const errDiv = modal.querySelector('#add-error');
+
+    // Field-level validation helpers for Add Item Modal
+    const setFieldError = (fieldEl, message, anchorEl = null) => {
+        if (!fieldEl) return;
+        fieldEl.classList.add('is-invalid');
+        const targetAnchor = anchorEl || fieldEl;
+        const parent = targetAnchor.parentElement;
+        if (parent) {
+            const existing = parent.querySelector(`.field-error-hint[data-for="${fieldEl.id || 'field'}"]`);
+            if (existing) existing.remove();
+            const hint = document.createElement('div');
+            hint.className = 'field-error-hint';
+            hint.setAttribute('data-for', fieldEl.id || 'field');
+            hint.innerHTML = `<i class="fa-solid fa-circle-exclamation"></i> <span>${message}</span>`;
+            targetAnchor.insertAdjacentElement('afterend', hint);
+        }
+    };
+
+    const clearFieldError = (fieldEl, anchorEl = null) => {
+        if (!fieldEl) return;
+        fieldEl.classList.remove('is-invalid');
+        const targetAnchor = anchorEl || fieldEl;
+        const parent = targetAnchor.parentElement;
+        if (parent) {
+            const hint = parent.querySelector(`.field-error-hint[data-for="${fieldEl.id || 'field'}"]`);
+            if (hint) hint.remove();
+        }
+    };
+
+    const clearAllFieldErrors = (container) => {
+        if (!container) return;
+        container.querySelectorAll('.is-invalid').forEach(el => el.classList.remove('is-invalid'));
+        container.querySelectorAll('.field-error-hint').forEach(el => el.remove());
+    };
+
+    // Form inputs
+    const titleInput = modal.querySelector('#item-title');
+    const priceInput = modal.querySelector('#item-price');
+    const conditionInput = modal.querySelector('#item-condition');
+    const descInput = modal.querySelector('#item-desc');
+    const imgInput = modal.querySelector('#item-img');
+    const catSelector = modal.querySelector('#item-categories-selector');
     
     // Multi-Category Helpers
     const getSelectedCategories = () => {
@@ -162,15 +200,31 @@ export async function showAddListingModal() {
         if (countSpan) {
             countSpan.textContent = `${count} selected`;
         }
+        if (count > 0) {
+            clearFieldError(catSelector, catSelector);
+        }
     };
 
     modal.querySelectorAll('input[name="item-categories"]').forEach(cb => {
         cb.addEventListener('change', updateCategoryPillStates);
     });
 
+    // Real-Time Clearing Listeners
+    titleInput.addEventListener('input', () => clearFieldError(titleInput));
+    priceInput.addEventListener('input', () => clearFieldError(priceInput));
+    conditionInput.addEventListener('change', () => clearFieldError(conditionInput));
+    descInput.addEventListener('input', () => clearFieldError(descInput));
+    imgInput.addEventListener('change', () => {
+        if (imgInput.files && imgInput.files.length > 0) {
+            clearFieldError(imgInput);
+        }
+    });
+
     // Reset Logic: Ensure Step 1 is active on start
     const resetForm = () => {
         addForm.reset();
+        clearAllFieldErrors(step1);
+        clearAllFieldErrors(step2);
         updateCategoryPillStates();
         step1.classList.add('active');
         step2.classList.remove('active');
@@ -185,20 +239,66 @@ export async function showAddListingModal() {
         document.body.style.overflow = 'auto';
     });
 
-    // Step Navigation
+    // Step Navigation with Inline Field-Level Validation
     nextBtn.addEventListener('click', () => {
-        const title = modal.querySelector('#item-title').value.trim();
-        const price = modal.querySelector('#item-price').value.trim();
-        const selectedCategories = getSelectedCategories();
-        const imfFile = modal.querySelector('#item-img').files[0];
+        clearAllFieldErrors(step1);
+        errDiv.textContent = "";
 
-        if (!title || !price || !imfFile) {
-            errDiv.textContent = "Please fill all required fields and upload an image.";
-            return;
+        const title = titleInput.value.trim();
+        const price = priceInput.value.trim();
+        const condition = conditionInput.value;
+        const desc = descInput.value.trim();
+        const selectedCategories = getSelectedCategories();
+        const imgFile = imgInput.files && imgInput.files[0];
+
+        let hasError = false;
+        let firstInvalid = null;
+
+        const markInvalid = (el, msg, anchor = null) => {
+            setFieldError(el, msg, anchor);
+            hasError = true;
+            if (!firstInvalid) firstInvalid = el;
+        };
+
+        // 1. Item Name / Title
+        if (!title) {
+            markInvalid(titleInput, 'Item Title is required');
         }
 
+        // 2. Categories
         if (selectedCategories.length === 0) {
-            errDiv.textContent = "Please select at least one category tag for your item.";
+            markInvalid(catSelector, 'Please select at least one category tag', catSelector);
+        }
+
+        // 3. Price / Cost
+        if (!price) {
+            markInvalid(priceInput, 'Price/Cost is required');
+        } else if (isNaN(price) || Number(price) < 0) {
+            markInvalid(priceInput, 'Please enter a valid price amount');
+        }
+
+        // 4. Item Condition
+        if (!condition) {
+            markInvalid(conditionInput, 'Item condition is required');
+        }
+
+        // 5. Item Description
+        if (!desc) {
+            markInvalid(descInput, 'Item description is required');
+        }
+
+        // 6. Image selection
+        if (!imgFile) {
+            markInvalid(imgInput, 'Please upload at least one image of the item');
+        }
+
+        if (hasError) {
+            if (firstInvalid) {
+                firstInvalid.scrollIntoView({ behavior: 'smooth', block: 'center' });
+                if (typeof firstInvalid.focus === 'function') {
+                    firstInvalid.focus();
+                }
+            }
             return;
         }
 
@@ -212,7 +312,7 @@ export async function showAddListingModal() {
             modal.querySelector('#preview-img-tag').src = e.target.result;
             modal.querySelector('#summary-img-prev').style.display = 'block';
         };
-        reader.readAsDataURL(imfFile);
+        reader.readAsDataURL(imgFile);
 
         errDiv.textContent = "";
         step1.classList.remove('active');

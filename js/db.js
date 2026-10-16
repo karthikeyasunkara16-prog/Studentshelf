@@ -758,12 +758,34 @@ export async function initiateChat(senderName, receiverName, productName, sender
  * Sends chat message using custom timestamped message Document ID:
  * `docId = msg_${Date.now()}_${cleanSender}`
  */
-export async function sendMessage(chatId, senderName, receiverName, messageText) {
+export async function sendMessage(chatId, senderName, receiverName, messageText, senderId = null, receiverId = null) {
     try {
         const chatRef = doc(db, "chats", chatId);
         const chatSnap = await getDoc(chatRef);
         const chatData = chatSnap.exists() ? chatSnap.data() : {};
         const productName = chatData.productName || "Product";
+
+        const currentUserId = auth.currentUser ? auth.currentUser.uid : senderId;
+
+        // Resolve senderId and receiverId reliably from chatData
+        let resolvedSenderId = senderId || currentUserId;
+        let resolvedReceiverId = receiverId;
+
+        if (chatSnap.exists()) {
+            if (currentUserId && currentUserId === chatData.senderId) {
+                resolvedSenderId = chatData.senderId;
+                resolvedReceiverId = resolvedReceiverId || chatData.receiverId;
+            } else if (currentUserId && currentUserId === chatData.receiverId) {
+                resolvedSenderId = chatData.receiverId;
+                resolvedReceiverId = resolvedReceiverId || chatData.senderId;
+            } else if (senderName === chatData.senderName) {
+                resolvedSenderId = resolvedSenderId || chatData.senderId;
+                resolvedReceiverId = resolvedReceiverId || chatData.receiverId;
+            } else if (senderName === chatData.receiverName) {
+                resolvedSenderId = resolvedSenderId || chatData.receiverId;
+                resolvedReceiverId = resolvedReceiverId || chatData.senderId;
+            }
+        }
 
         const cleanSender = formatChatIdPart(senderName);
         const msgDocId = `msg_${Date.now()}_${cleanSender}`;
@@ -772,6 +794,8 @@ export async function sendMessage(chatId, senderName, receiverName, messageText)
         await setDoc(messageRef, {
             docId: msgDocId,
             id: msgDocId,
+            senderId: resolvedSenderId || null,
+            receiverId: resolvedReceiverId || null,
             senderName,
             receiverName,
             messageText,
@@ -785,7 +809,9 @@ export async function sendMessage(chatId, senderName, receiverName, messageText)
         await setDoc(chatRef, {
             lastMessageText: messageText,
             lastMessageTimestamp: serverTimestamp(),
-            lastMessageSenderName: senderName
+            lastMessageSenderName: senderName,
+            lastMessageSenderId: resolvedSenderId || null,
+            lastMessageReceiverId: resolvedReceiverId || null
         }, { merge: true });
     } catch (e) {
         console.error("Error sending message: ", e);
@@ -807,30 +833,36 @@ export function subscribeToMessages(chatId, callback) {
                     messages.push({ id: doc.id, ...doc.data() });
                 });
                 
-                // Notify on new messages
+                // Recipient-Only Notifications for new incoming messages
                 if (!isInitial) {
                     snapshot.docChanges().forEach((change) => {
                         if (change.type === 'added') {
                             const msg = change.doc.data();
                             const user = auth.currentUser;
                             if (user) {
+                                const currentUserId = user.uid;
                                 const userEmailPrefix = user.email ? user.email.split('@')[0] : '';
                                 const userDisplayName = user.displayName || '';
                                 
-                                // Check if it was sent by me
-                                let isSentByMe = msg.senderName === userDisplayName || msg.senderName === userEmailPrefix;
-                                
-                                // If receiver is me, then it was sent by the other party
-                                const isReceiverMe = msg.receiverName === userDisplayName || msg.receiverName === userEmailPrefix;
-                                if (isReceiverMe) {
-                                    isSentByMe = false;
+                                // RECIPIENT-ONLY CHECK 1: If sent by current user, NEVER notify
+                                const isSentByMe = (msg.senderId && msg.senderId === currentUserId) ||
+                                                   (msg.senderName && (msg.senderName === userDisplayName || msg.senderName === userEmailPrefix));
+                                if (isSentByMe) {
+                                    return; // DO NOT NOTIFY SENDER
                                 }
                                 
-                                // Check if message timestamp is fresh (under 30s or pending local writes)
+                                // RECIPIENT-ONLY CHECK 2: Only notify if current user IS the receiver
+                                const isReceiverMe = (msg.receiverId && msg.receiverId === currentUserId) ||
+                                                     (msg.receiverName && (msg.receiverName === userDisplayName || msg.receiverName === userEmailPrefix));
+                                if (!isReceiverMe && (msg.receiverId || msg.receiverName)) {
+                                    return; // DO NOT NOTIFY NON-RECIPIENTS
+                                }
+                                
+                                // Check if message timestamp is fresh (under 45s)
                                 let isFresh = false;
                                 if (msg.timestamp) {
                                     const msgDate = msg.timestamp.toDate ? msg.timestamp.toDate() : new Date(msg.timestamp);
-                                    isFresh = (new Date() - msgDate) < 30000;
+                                    isFresh = (new Date() - msgDate) < 45000;
                                 } else {
                                     isFresh = true;
                                 }
@@ -844,7 +876,7 @@ export function subscribeToMessages(chatId, callback) {
                                 // Trigger only when overlay is closed, browser tab is backgrounded, or on another chat
                                 const isNotActive = !isActiveOnThisChat || document.hidden;
                                 
-                                if (!isSentByMe && isFresh && isNotActive && ('Notification' in window) && Notification.permission === 'granted') {
+                                if (isFresh && isNotActive && ('Notification' in window) && Notification.permission === 'granted') {
                                     const sender = msg.senderName || 'Someone';
                                     const product = msg.productName || 'Product';
                                     const notifTitle = `New message from ${sender} about ${product}`;
@@ -941,36 +973,60 @@ export async function getUserChats(uid) {
     }
 }
 
-export async function hasUnreadMessagesInChat(chatId, currentUserName) {
+export async function hasUnreadMessagesInChat(chatId, currentUserName, currentUserId = null) {
     try {
+        const uid = currentUserId || auth.currentUser?.uid;
         const messagesRef = collection(db, "chats", chatId, "messages");
-        const q = query(
-            messagesRef, 
-            where("receiverName", "==", currentUserName), 
-            where("isRead", "==", false)
-        );
-        const snap = await getDocs(q);
-        return !snap.empty;
+        const snap = await getDocs(messagesRef);
+        let hasUnread = false;
+
+        snap.forEach(docSnap => {
+            const data = docSnap.data();
+            if (data.isRead === false) {
+                // Sender NEVER has unread messages for messages they sent
+                const isSentByMe = (uid && data.senderId === uid) ||
+                                   (currentUserName && data.senderName === currentUserName);
+                if (!isSentByMe) {
+                    // Check if receiver is the current user
+                    const isForMe = (uid && data.receiverId === uid) ||
+                                    (currentUserName && data.receiverName === currentUserName) ||
+                                    (!data.receiverId && !data.receiverName);
+                    if (isForMe) {
+                        hasUnread = true;
+                    }
+                }
+            }
+        });
+        return hasUnread;
     } catch (e) {
         console.error("Error checking unread messages: ", e);
         return false;
     }
 }
 
-export async function markMessagesAsRead(chatId, currentUserName) {
+export async function markMessagesAsRead(chatId, currentUserName, currentUserId = null) {
     try {
+        const uid = currentUserId || auth.currentUser?.uid;
         const messagesRef = collection(db, "chats", chatId, "messages");
-        const q = query(
-            messagesRef, 
-            where("receiverName", "==", currentUserName), 
-            where("isRead", "==", false)
-        );
-        const snap = await getDocs(q);
+        const snap = await getDocs(messagesRef);
         
         const batch = [];
         snap.forEach(docSnap => {
-            const docRef = doc(db, "chats", chatId, "messages", docSnap.id);
-            batch.push(updateDoc(docRef, { isRead: true }));
+            const data = docSnap.data();
+            if (data.isRead === false) {
+                // Only mark messages sent TO me as read, ignore messages sent BY me
+                const isSentByMe = (uid && data.senderId === uid) ||
+                                   (currentUserName && data.senderName === currentUserName);
+                if (!isSentByMe) {
+                    const isForMe = (uid && data.receiverId === uid) ||
+                                    (currentUserName && data.receiverName === currentUserName) ||
+                                    (!data.receiverId && !data.receiverName);
+                    if (isForMe) {
+                        const docRef = doc(db, "chats", chatId, "messages", docSnap.id);
+                        batch.push(updateDoc(docRef, { isRead: true }));
+                    }
+                }
+            }
         });
         
         await Promise.all(batch);

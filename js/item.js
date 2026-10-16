@@ -1,4 +1,4 @@
-import { getListingById, addLead, initiateChat, sendMessage, subscribeToMessages, getActiveChatsForItem, getUserProfile, getListings } from './db.js';
+import { getListingById, addLead, initiateChat, sendMessage, subscribeToMessages, markMessagesAsRead, getActiveChatsForItem, getUserProfile, getListings } from './db.js';
 import { auth } from './firebase.js';
 import { isUserVerified, showVerificationRequiredPrompt } from './verification.js';
 
@@ -36,10 +36,15 @@ function openChatOverlay(chatId, otherUserName, productName, currentUserName) {
         if (!messagesContainer) return;
         messagesContainer.innerHTML = '';
         if (messages.length === 0) {
-            messagesContainer.innerHTML = '<div class="text-center text-muted py-3">No messages yet. Send a message to start the conversation!</div>';
+            messagesContainer.innerHTML = '<div class="text-center text-muted py-4">No messages yet. Send a message to start the conversation!</div>';
         } else {
+            const banner = document.createElement('div');
+            banner.className = 'chat-context-banner';
+            banner.innerHTML = `<i class="fa-solid fa-tag"></i> Inquiring about <strong>${escapeHtml(productName)}</strong>`;
+            messagesContainer.appendChild(banner);
+
             messages.forEach(msg => {
-                const isSentByMe = msg.senderName === currentUserName;
+                const isSentByMe = msg.senderName === currentUserName || (auth.currentUser && msg.senderId === auth.currentUser.uid);
                 const bubble = document.createElement('div');
                 bubble.className = `message-bubble ${isSentByMe ? 'sent' : 'received'}`;
                 
@@ -50,7 +55,7 @@ function openChatOverlay(chatId, otherUserName, productName, currentUserName) {
                 }
                 
                 bubble.innerHTML = `
-                    <span class="message-sender">${msg.senderName}</span>
+                    ${!isSentByMe ? `<span class="message-sender">${escapeHtml(msg.senderName)}</span>` : ''}
                     <div class="message-text">${escapeHtml(msg.messageText)}</div>
                     <span class="message-time">${timeStr}</span>
                 `;
@@ -58,6 +63,13 @@ function openChatOverlay(chatId, otherUserName, productName, currentUserName) {
             });
             messagesContainer.scrollTop = messagesContainer.scrollHeight;
         }
+    });
+
+    // Mark as read immediately when chat opens
+    markMessagesAsRead(chatId, currentUserName, auth.currentUser?.uid).then(() => {
+        window.dispatchEvent(new CustomEvent('messages-read-update'));
+    }).catch(e => {
+        console.error("Error marking messages as read:", e);
     });
 
     // Handle form submit
@@ -85,11 +97,6 @@ export async function renderItemDetail(container, id) {
     if (!auth.currentUser) {
         alert('Please Login First to View Details and Contact Seller!');
         window.location.hash = '#/login?redirect=' + encodeURIComponent(window.location.hash);
-        return;
-    }
-    if (!isUserVerified(auth.currentUser)) {
-        showVerificationRequiredPrompt("Verify your college email to start buying and selling on campus.");
-        window.location.hash = '#/';
         return;
     }
     container.innerHTML = `
@@ -303,19 +310,36 @@ export async function renderItemDetail(container, id) {
             <!-- Glassmorphic Chat Overlay -->
             <div class="chat-overlay" id="chat-overlay">
                 <div class="chat-card">
-                    <div class="chat-header">
-                        <div class="chat-header-title">
-                            <h3 id="chat-user-name">Chat</h3>
-                            <span id="chat-product-name">${escapeHtml(item.title)}</span>
+                    <div class="chat-header sticky-chat-header">
+                        <div class="chat-header-left">
+                            <div class="chat-user-avatar">
+                                <div class="avatar-circle">S</div>
+                                <span class="avatar-status-dot" title="Active on campus"></span>
+                            </div>
+                            <div class="chat-header-info">
+                                <div class="chat-header-name-row">
+                                    <h3 class="chat-receiver-name" id="chat-user-name">Seller</h3>
+                                    <span class="chat-online-pill"><span class="pulse-dot"></span> Active Student</span>
+                                </div>
+                                <div class="chat-header-badge-row">
+                                    <span class="chat-item-pill" id="chat-product-name">
+                                        <i class="fa-solid fa-tag"></i> Item: <strong>${escapeHtml(item.title)}</strong>
+                                    </span>
+                                </div>
+                            </div>
                         </div>
-                        <button type="button" class="chat-close-btn" id="chat-close-btn">&times;</button>
+                        <div class="chat-header-actions">
+                            <button type="button" class="chat-close-btn" id="chat-close-btn" title="Close Chat" aria-label="Close Chat">&times;</button>
+                        </div>
                     </div>
                     <div class="chat-messages" id="chat-messages">
                         <!-- Realtime messages load here -->
                     </div>
                     <form class="chat-input-area" id="chat-input-form">
-                        <input type="text" id="chat-input-field" placeholder="Type a message to the seller..." required autocomplete="off">
-                        <button type="submit" class="chat-send-btn">
+                        <div class="chat-input-wrapper">
+                            <input type="text" id="chat-input-field" placeholder="Type a message to the seller..." required autocomplete="off">
+                        </div>
+                        <button type="submit" class="chat-send-btn" title="Send Message" aria-label="Send Message">
                             <i class="fa-solid fa-paper-plane"></i>
                         </button>
                     </form>
@@ -413,10 +437,6 @@ export async function renderItemDetail(container, id) {
                     if (!auth.currentUser) {
                         alert('Please Login to Contact Seller');
                         window.location.hash = '#/login?redirect=' + encodeURIComponent(window.location.hash);
-                        return;
-                    }
-                    if (!isUserVerified(auth.currentUser)) {
-                        showVerificationRequiredPrompt("Verify your college email to start buying and selling on campus.");
                         return;
                     }
 

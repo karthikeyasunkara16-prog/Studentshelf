@@ -1,5 +1,5 @@
 import { auth, createUserWithEmailAndPassword, signInWithEmailAndPassword, sendEmailVerification, signOut, sendPasswordResetEmail, applyActionCode, checkActionCode, isSignInWithEmailLink, signInWithEmailLink } from './firebase.js';
-import { saveUserProfile, generateUserDocId, listenToPendingVerification } from './db.js';
+import { saveUserProfile, getUserProfile, generateUserDocId, listenToPendingVerification } from './db.js';
 import { isCollegeEmail, isUserVerified, sendCollegeVerificationCode, sendInlineCollegeVerificationOtp, verifyInlineCollegeOtp, showInlineEmailOtpModal, showEmailVerificationModal, sendEmailOTP, requestVerification } from './verification.js';
 
 export function renderLogin(container) {
@@ -13,20 +13,21 @@ export function renderLogin(container) {
                     <input type="email" id="login-email" class="form-control" required placeholder="student@pragati.ac.in">
                     <small class="college-email-hint" style="display:block; margin-top:4px; font-size:12px; color:#64748B;">
                         <i class="fa-solid fa-graduation-cap" style="color:#00ABE4; margin-right:4px;"></i>
-                        Please use your official college email ID for verification.
+                        Please use your official college email ID.
                     </small>
                 </div>
-                <div class="form-group">
-                    <label>Password</label>
+                <div class="form-group mb-2">
+                    <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:6px;">
+                        <label style="margin-bottom:0;">Password</label>
+                        <a href="javascript:void(0)" id="forgot-password-link" class="text-link" style="font-size: 12.5px; font-weight: 600; text-decoration: none;">Forgot Password?</a>
+                    </div>
                     <div class="password-wrapper">
                         <input type="password" id="login-password" class="form-control" required placeholder="********">
                         <i class="fa-solid fa-eye eye-icon toggle-password" data-target="login-password"></i>
                     </div>
                 </div>
-                <div class="text-right mb-3">
-                    <a href="#" id="forgot-password-link" class="text-muted" style="font-size: 0.85rem; text-decoration: none;">Forgot Password?</a>
-                </div>
                 <div id="login-error" class="error-msg"></div>
+                <div id="login-success" class="success-msg text-center mt-2" style="display:none; color:#10B981; font-weight:600; font-size:13px; line-height: 1.4;"></div>
                 <button type="submit" class="btn btn-primary w-100 mt-3" id="login-submit-btn">Login</button>
             </form>
             <p class="text-center mt-4">Don't have an account? <a href="#/register" class="text-link">Sign Up</a></p>
@@ -47,17 +48,76 @@ export function renderLogin(container) {
         });
     });
 
+    const emailInput = document.getElementById('login-email');
+    const pwdInput = document.getElementById('login-password');
+    const errDiv = document.getElementById('login-error');
+    const btn = document.getElementById('login-submit-btn') || document.getElementById('login-btn');
+
+    // Field-level validation helpers for login
+    const setLoginFieldError = (fieldEl, message, anchorEl = null) => {
+        if (!fieldEl) return;
+        fieldEl.classList.add('is-invalid');
+        const targetAnchor = anchorEl || fieldEl;
+        const parent = targetAnchor.parentElement;
+        if (parent) {
+            const existing = parent.querySelector(`.field-error-hint[data-for="${fieldEl.id}"]`);
+            if (existing) existing.remove();
+            const hint = document.createElement('div');
+            hint.className = 'field-error-hint';
+            hint.setAttribute('data-for', fieldEl.id);
+            hint.innerHTML = `<i class="fa-solid fa-circle-exclamation"></i> <span>${message}</span>`;
+            targetAnchor.insertAdjacentElement('afterend', hint);
+        }
+    };
+
+    const clearLoginFieldError = (fieldEl, anchorEl = null) => {
+        if (!fieldEl) return;
+        fieldEl.classList.remove('is-invalid');
+        const targetAnchor = anchorEl || fieldEl;
+        const parent = targetAnchor.parentElement;
+        if (parent) {
+            const hint = parent.querySelector(`.field-error-hint[data-for="${fieldEl.id}"]`);
+            if (hint) hint.remove();
+        }
+    };
+
+    emailInput.addEventListener('input', () => clearLoginFieldError(emailInput));
+    pwdInput.addEventListener('input', () => clearLoginFieldError(pwdInput, pwdInput.closest('.password-wrapper')));
+
     document.getElementById('login-form').addEventListener('submit', async (e) => {
         e.preventDefault();
-        const email = document.getElementById('login-email').value.trim();
-        const pwd = document.getElementById('login-password').value;
-        const errDiv = document.getElementById('login-error');
-        const btn = document.getElementById('login-submit-btn') || document.getElementById('login-btn');
+        const email = emailInput.value.trim();
+        const pwd = pwdInput.value;
 
         errDiv.textContent = '';
-        
-        if (!isCollegeEmail(email)) {
-            errDiv.textContent = 'Please use your official college email ID for verification (e.g. yourname@college.edu or rollno@pragati.ac.in).';
+        clearLoginFieldError(emailInput);
+        clearLoginFieldError(pwdInput, pwdInput.closest('.password-wrapper'));
+
+        let hasError = false;
+        let firstInvalid = null;
+
+        if (!email) {
+            setLoginFieldError(emailInput, 'College Email is required');
+            hasError = true;
+            firstInvalid = emailInput;
+        } else if (!isCollegeEmail(email)) {
+            setLoginFieldError(emailInput, 'Please use your official college email ID (e.g. rollno@pragati.ac.in)');
+            hasError = true;
+            firstInvalid = emailInput;
+        }
+
+        const pwdWrapper = pwdInput.closest('.password-wrapper') || pwdInput;
+        if (!pwd) {
+            setLoginFieldError(pwdInput, 'Password is required', pwdWrapper);
+            hasError = true;
+            if (!firstInvalid) firstInvalid = pwdInput;
+        }
+
+        if (hasError) {
+            if (firstInvalid) {
+                firstInvalid.scrollIntoView({ behavior: 'smooth', block: 'center' });
+                firstInvalid.focus();
+            }
             return;
         }
 
@@ -66,15 +126,17 @@ export function renderLogin(container) {
             btn.disabled = true;
             const userCredential = await signInWithEmailAndPassword(auth, email, pwd);
             
-            // Check verification status
-            if (!isUserVerified(userCredential.user)) {
-                btn.textContent = 'Login';
-                btn.disabled = false;
-                if (typeof window.closeAuthModal === 'function') {
-                    window.closeAuthModal();
+            // Seed user profile cache on login so user info and permissions are ready
+            try {
+                const profile = await getUserProfile(userCredential.user.uid);
+                if (profile) {
+                    localStorage.setItem('user_profile', JSON.stringify(profile));
                 }
-                showEmailVerificationModal(userCredential.user, email);
-                return;
+            } catch (pErr) {}
+
+            // Close any active auth modal
+            if (typeof window.closeAuthModal === 'function') {
+                window.closeAuthModal();
             }
 
             const hashParts = window.location.hash.split('?redirect=');
@@ -84,40 +146,93 @@ export function renderLogin(container) {
                 window.location.hash = '#/';
             }
         } catch (error) {
-            errDiv.textContent = error.message;
             btn.disabled = false;
             btn.textContent = 'Login';
+            let userMessage = 'Invalid email or password. Please try again.';
+            if (error.code === 'auth/user-not-found' || error.code === 'auth/wrong-password' || error.code === 'auth/invalid-credential') {
+                userMessage = 'Incorrect email or password. Please try again or click Forgot Password.';
+            } else if (error.code === 'auth/too-many-requests') {
+                userMessage = 'Too many failed login attempts. Please try again later or reset your password.';
+            } else if (error.message) {
+                userMessage = error.message;
+            }
+            errDiv.textContent = userMessage;
         }
     });
 
-    // Forgot Password Logic
+    // Forgot Password Flow
     document.getElementById('forgot-password-link').addEventListener('click', async (e) => {
         e.preventDefault();
-        const email = prompt("Please enter your College Email to receive a reset link:");
-        
-        if (!email) return;
+        errDiv.textContent = '';
+        const successDiv = document.getElementById('login-success');
+        if (successDiv) {
+            successDiv.style.display = 'none';
+            successDiv.textContent = '';
+        }
+        clearLoginFieldError(emailInput);
 
-        if (!email.endsWith('.edu') && !email.endsWith('.ac.in')) {
-            alert('Please use a valid college email (.edu or .ac.in)');
+        let targetEmail = emailInput.value.trim();
+
+        // If email input is empty, prompt user to enter their registered college email
+        if (!targetEmail) {
+            const promptVal = prompt("Enter your registered College Email to receive a password reset link:");
+            if (promptVal === null) return; // user cancelled prompt
+            targetEmail = promptVal.trim();
+            if (targetEmail) {
+                emailInput.value = targetEmail;
+            }
+        }
+
+        if (!targetEmail) {
+            setLoginFieldError(emailInput, 'Please enter your registered College Email address');
+            emailInput.focus();
             return;
         }
 
+        if (!isCollegeEmail(targetEmail)) {
+            setLoginFieldError(emailInput, 'Please use a valid college email ending with .edu or .ac.in');
+            emailInput.focus();
+            return;
+        }
+
+        const forgotLink = document.getElementById('forgot-password-link');
+        const origLinkText = forgotLink ? forgotLink.textContent : 'Forgot Password?';
+
         try {
-            await sendPasswordResetEmail(auth, email);
-            alert('Password reset link sent! Please check your inbox (and spam folder).');
+            if (forgotLink) {
+                forgotLink.textContent = 'Sending link...';
+                forgotLink.style.pointerEvents = 'none';
+            }
+
+            await sendPasswordResetEmail(auth, targetEmail);
+
+            if (successDiv) {
+                successDiv.style.display = 'block';
+                successDiv.innerHTML = '<i class="fa-solid fa-circle-check"></i> Password reset link sent! Please check your email inbox (and spam folder).';
+            }
+            alert('Password reset link sent! Please check your email inbox.');
         } catch (error) {
-            let userMessage;
+            let userMessage = 'Something went wrong. Please try again.';
             switch(error.code) {
                 case 'auth/user-not-found':
-                    userMessage = 'No account found with this email.';
+                    userMessage = 'No account found with this college email address.';
                     break;
                 case 'auth/invalid-email':
                     userMessage = 'Please enter a valid college email address.';
                     break;
+                case 'auth/too-many-requests':
+                    userMessage = 'Too many attempts. Please wait a moment and try again.';
+                    break;
                 default:
-                    userMessage = 'Something went wrong. Please try again.';
+                    userMessage = error.message || 'Failed to send password reset link. Please try again.';
             }
-            alert(userMessage);
+            setLoginFieldError(emailInput, userMessage);
+            emailInput.focus();
+        } finally {
+            if (forgotLink) {
+                forgotLink.textContent = origLinkText;
+                forgotLink.style.pointerEvents = 'auto';
+            }
         }
     });
 }
@@ -175,8 +290,8 @@ export function renderRegister(container) {
                     </div>
                 </div>
                 <div id="reg-error" class="error-msg"></div>
-                <button type="submit" class="btn btn-primary w-100 mt-3" id="reg-btn" disabled>
-                    <i class="fa-solid fa-shield-halved" id="reg-btn-icon"></i> <span id="reg-btn-text">Verify Email First</span>
+                <button type="submit" class="btn btn-primary w-100 mt-3" id="reg-btn">
+                    <i class="fa-solid fa-circle-check" id="reg-btn-icon"></i> <span id="reg-btn-text">Submit / Create Account</span>
                 </button>
             </form>
             <p class="text-center mt-4">Already have an account? <a href="#/login" class="text-link">Login</a></p>
@@ -197,7 +312,12 @@ export function renderRegister(container) {
         });
     });
 
+    const nameInput = document.getElementById('reg-name');
+    const collegeIdInput = document.getElementById('reg-college-id');
     const emailInput = document.getElementById('reg-email');
+    const whatsappInput = document.getElementById('reg-whatsapp');
+    const passwordInput = document.getElementById('reg-password');
+    const confirmPasswordInput = document.getElementById('reg-confirm-password');
     const verifyBtn = document.getElementById('btn-verify-email');
     const statusRow = document.getElementById('email-verification-status');
     const changeBtn = document.getElementById('btn-change-email');
@@ -206,6 +326,56 @@ export function renderRegister(container) {
     const submitIcon = document.getElementById('reg-btn-icon');
     const submitText = document.getElementById('reg-btn-text');
     const errDiv = document.getElementById('reg-error');
+
+    // Field-level validation helpers
+    const setFieldError = (fieldEl, message, anchorEl = null) => {
+        if (!fieldEl) return;
+        fieldEl.classList.add('is-invalid');
+        const targetAnchor = anchorEl || fieldEl;
+        const parent = targetAnchor.parentElement;
+        if (parent) {
+            const existing = parent.querySelector(`.field-error-hint[data-for="${fieldEl.id}"]`);
+            if (existing) existing.remove();
+            const hint = document.createElement('div');
+            hint.className = 'field-error-hint';
+            hint.setAttribute('data-for', fieldEl.id);
+            hint.innerHTML = `<i class="fa-solid fa-circle-exclamation"></i> <span>${message}</span>`;
+            targetAnchor.insertAdjacentElement('afterend', hint);
+        }
+    };
+
+    const clearFieldError = (fieldEl, anchorEl = null) => {
+        if (!fieldEl) return;
+        fieldEl.classList.remove('is-invalid');
+        const targetAnchor = anchorEl || fieldEl;
+        const parent = targetAnchor.parentElement;
+        if (parent) {
+            const hint = parent.querySelector(`.field-error-hint[data-for="${fieldEl.id}"]`);
+            if (hint) hint.remove();
+        }
+    };
+
+    const clearAllFieldErrors = (container) => {
+        if (!container) return;
+        container.querySelectorAll('.is-invalid').forEach(el => el.classList.remove('is-invalid'));
+        container.querySelectorAll('.field-error-hint').forEach(el => el.remove());
+    };
+
+    // Real-time clearing on input / change
+    nameInput.addEventListener('input', () => clearFieldError(nameInput));
+    collegeIdInput.addEventListener('input', () => clearFieldError(collegeIdInput));
+    whatsappInput.addEventListener('input', () => clearFieldError(whatsappInput));
+    passwordInput.addEventListener('input', () => {
+        clearFieldError(passwordInput, passwordInput.closest('.password-wrapper'));
+        if (confirmPasswordInput.value && confirmPasswordInput.classList.contains('is-invalid')) {
+            if (confirmPasswordInput.value === passwordInput.value) {
+                clearFieldError(confirmPasswordInput, confirmPasswordInput.closest('.password-wrapper'));
+            }
+        }
+    });
+    confirmPasswordInput.addEventListener('input', () => {
+        clearFieldError(confirmPasswordInput, confirmPasswordInput.closest('.password-wrapper'));
+    });
 
     // State flags for strict verification
     let isEmailVerified = false;
@@ -464,25 +634,28 @@ export function renderRegister(container) {
         hintText.style.removeProperty('display');
         hintText.style.display = 'flex';
 
-        // STRICT SUBMIT LOCK: Keep Submit button disabled during typing
-        submitBtn.disabled = true;
+        // Clear any error hint on email
+        clearFieldError(emailInput, emailInput.closest('.email-verify-group'));
+
+        submitBtn.disabled = false;
         submitIcon.className = 'fa-solid fa-shield-halved';
-        submitText.textContent = 'Verify Email First';
+        submitText.textContent = 'Submit / Create Account';
     });
 
     // BUG 2 FIX: Trigger Verification Link via Firebase Auth & Open "Check Your Inbox" Screen
     const triggerEmailVerification = async () => {
         errDiv.textContent = '';
+        clearFieldError(emailInput, emailInput.closest('.email-verify-group'));
         const email = emailInput.value.trim().toLowerCase();
 
         if (!email) {
-            errDiv.textContent = 'Please enter your official college email address.';
+            setFieldError(emailInput, 'College Email is required', emailInput.closest('.email-verify-group'));
             emailInput.focus();
             return;
         }
 
         if (!isCollegeEmail(email)) {
-            errDiv.textContent = 'Please use an official college domain (e.g. rollno@pragati.ac.in or yourname@college.edu).';
+            setFieldError(emailInput, 'Please use an official college domain (e.g. rollno@pragati.ac.in or yourname@college.edu)', emailInput.closest('.email-verify-group'));
             emailInput.focus();
             return;
         }
@@ -568,45 +741,85 @@ export function renderRegister(container) {
         hintText.style.removeProperty('display');
         hintText.style.display = 'flex';
 
-        // STRICT SUBMIT LOCK: Re-lock submit button
-        submitBtn.disabled = true;
+        clearFieldError(emailInput, emailInput.closest('.email-verify-group'));
+        submitBtn.disabled = false;
         submitIcon.className = 'fa-solid fa-shield-halved';
-        submitText.textContent = 'Verify Email First';
+        submitText.textContent = 'Submit / Create Account';
 
         emailInput.focus();
     });
 
-    // Form Submit Handler (Single-Step Registration)
+    // Form Submit Handler (Single-Step Registration with Field-Level Validation)
     document.getElementById('register-form').addEventListener('submit', async (e) => {
         e.preventDefault();
         errDiv.textContent = '';
+        clearAllFieldErrors(document.getElementById('register-form'));
 
-        const name = document.getElementById('reg-name').value.trim();
-        const collegeID = document.getElementById('reg-college-id').value.trim();
+        const name = nameInput.value.trim();
+        const collegeID = collegeIdInput.value.trim();
         const email = emailInput.value.trim().toLowerCase();
-        const rawWhatsapp = document.getElementById('reg-whatsapp').value.trim();
-        const pwd = document.getElementById('reg-password').value;
-        const confirmPwd = document.getElementById('reg-confirm-password').value;
+        const rawWhatsapp = whatsappInput.value.trim();
+        const pwd = passwordInput.value;
+        const confirmPwd = confirmPasswordInput.value;
 
-        if (!name || !collegeID || !email || !rawWhatsapp || !pwd) {
-            errDiv.textContent = 'Please fill out all required fields.';
-            return;
+        let hasError = false;
+        let firstInvalid = null;
+
+        const markInvalid = (el, msg, anchor = null) => {
+            setFieldError(el, msg, anchor);
+            hasError = true;
+            if (!firstInvalid) firstInvalid = el;
+        };
+
+        // 1. Full Name
+        if (!name) {
+            markInvalid(nameInput, 'Full Name is required');
         }
 
-        if (pwd !== confirmPwd) {
-            errDiv.textContent = 'Passwords do not match!';
-            return;
+        // 2. College ID / Roll Number
+        if (!collegeID) {
+            markInvalid(collegeIdInput, 'College Roll Number is required');
         }
 
-        if (pwd.length < 6) {
-            errDiv.textContent = 'Password must be at least 6 characters.';
-            return;
+        // 3. College Email ID
+        const emailGroup = emailInput.closest('.email-verify-group') || emailInput;
+        if (!email) {
+            markInvalid(emailInput, 'College Email is required', emailGroup);
+        } else if (!isCollegeEmail(email)) {
+            markInvalid(emailInput, 'Please enter a valid college email (.edu or .ac.in)', emailGroup);
+        } else if (!isEmailVerified || !isEmailVerifiedInline || email !== verifiedEmailAddress) {
+            markInvalid(emailInput, 'Please verify your college email using the Verify button first', emailGroup);
         }
 
-        // STRICT SUBMIT LOCK: Check email verification status
-        if (!isEmailVerified || !isEmailVerifiedInline || email !== verifiedEmailAddress) {
-            errDiv.textContent = 'Please verify your college email using the verification link sent to your inbox first.';
-            triggerEmailVerification();
+        // 4. Mobile / WhatsApp Number
+        const cleanedWa = rawWhatsapp.replace(/\D/g, '');
+        if (!rawWhatsapp || rawWhatsapp === '+91') {
+            markInvalid(whatsappInput, 'WhatsApp Number is required');
+        } else if (cleanedWa.length < 10) {
+            markInvalid(whatsappInput, 'Please enter a valid 10-digit WhatsApp number');
+        }
+
+        // 5. Password
+        const pwdWrapper = passwordInput.closest('.password-wrapper') || passwordInput;
+        if (!pwd) {
+            markInvalid(passwordInput, 'Password is required', pwdWrapper);
+        } else if (pwd.length < 6) {
+            markInvalid(passwordInput, 'Password must be at least 6 characters', pwdWrapper);
+        }
+
+        // 6. Confirm Password
+        const confirmPwdWrapper = confirmPasswordInput.closest('.password-wrapper') || confirmPasswordInput;
+        if (!confirmPwd) {
+            markInvalid(confirmPasswordInput, 'Please confirm your password', confirmPwdWrapper);
+        } else if (pwd && confirmPwd !== pwd) {
+            markInvalid(confirmPasswordInput, 'Passwords do not match', confirmPwdWrapper);
+        }
+
+        if (hasError) {
+            if (firstInvalid) {
+                firstInvalid.scrollIntoView({ behavior: 'smooth', block: 'center' });
+                firstInvalid.focus();
+            }
             return;
         }
 

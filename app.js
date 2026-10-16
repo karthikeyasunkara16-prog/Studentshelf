@@ -486,7 +486,9 @@ class AppRouter {
                     } else {
                         renderFloatingPermissionBanner();
                     }
-                    setupRealtimeChatNotificationTrigger(user.uid, user.displayName || (user.email ? user.email.split('@')[0] : 'User'));
+                    const userProfile = await getUserProfile(user.uid);
+                    const activeUserName = userProfile?.fullName || userProfile?.name || user.displayName || (user.email ? user.email.split('@')[0] : 'User');
+                    setupRealtimeChatNotificationTrigger(user.uid, activeUserName);
 
                     // 2. Attach real-time database profile observer
                     this.profileUnsubscribe = subscribeToUserProfile(user.uid, (profileData) => {
@@ -829,10 +831,6 @@ class AppRouter {
                     }
                     return;
                 }
-                if (!isUserVerified(currentUser)) {
-                    showVerificationRequiredPrompt("Verify your college email to start buying and selling on campus.");
-                    return;
-                }
                 showAddListingModal();
                 this.closeSidebar();
             });
@@ -861,10 +859,6 @@ class AppRouter {
                     alert('Please sign in to view messages.');
                     return window.location.hash = '#/login?redirect=%23%2Fmessages';
                 }
-                if (!isUserVerified(currentUser)) {
-                    showVerificationRequiredPrompt("Verify your college email to start buying and selling on campus.");
-                    return window.location.hash = '#/';
-                }
                 renderMessages(this.appDiv);
                 break;
             case '#/login':
@@ -883,10 +877,6 @@ class AppRouter {
                         window.location.hash = '#/login';
                     }
                     return;
-                }
-                if (!isUserVerified(currentUser)) {
-                    showVerificationRequiredPrompt("Verify your college email to start buying and selling on campus.");
-                    return window.location.hash = '#/';
                 }
                 // Redirect legacy hash to home and show modal
                 window.location.hash = '#/';
@@ -919,11 +909,6 @@ class AppRouter {
                     if (!currentUser) {
                         alert('Please Login First to View Details and Contact Seller!');
                         window.location.hash = '#/login?redirect=' + encodeURIComponent(window.location.hash);
-                        return;
-                    }
-                    if (!isUserVerified(currentUser)) {
-                        showVerificationRequiredPrompt("Verify your college email to start buying and selling on campus.");
-                        window.location.hash = '#/';
                         return;
                     }
                     // Extract ID and view item
@@ -1055,7 +1040,7 @@ class AppRouter {
 
             const chats = await getUserChats(currentUser.uid);
             for (const chat of chats) {
-                const unread = await hasUnreadMessagesInChat(chat.id, currentUserName);
+                const unread = await hasUnreadMessagesInChat(chat.id, currentUserName, currentUser.uid);
                 if (unread) {
                     unreadCount++;
                 }

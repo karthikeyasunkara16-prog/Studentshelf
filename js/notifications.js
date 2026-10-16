@@ -392,11 +392,29 @@ export function setupRealtimeChatNotificationTrigger(userId, userName) {
                         const sender = msg.senderName || 'Someone';
                         const product = msg.productName || productName;
                         
-                        // Verify current user is recipient and not author of this message
-                        const isSentByMe = (msg.senderId && msg.senderId === userId) ||
-                                           (msg.senderName && (msg.senderName === userName || msg.senderName === auth.currentUser?.displayName));
-                        
-                        // Check freshness
+                        // 1. RECIPIENT-ONLY NOTIFICATION CHECK:
+                        // Extract senderId, receiverId, and current user ID
+                        const currentUserId = auth.currentUser?.uid || userId;
+                        const userEmailPrefix = auth.currentUser?.email ? auth.currentUser.email.split('@')[0] : '';
+                        const userDisplayName = auth.currentUser?.displayName || '';
+
+                        // Explicit check: If current user is the sender -> STRICTLY DO NOT NOTIFY
+                        const isSentByMe = (msg.senderId && msg.senderId === currentUserId) ||
+                                           (msg.senderName && (msg.senderName === userName || msg.senderName === userDisplayName || msg.senderName === userEmailPrefix));
+
+                        if (isSentByMe) {
+                            return; // DO NOT NOTIFY SENDER
+                        }
+
+                        // Explicit check: Only dispatch notification when current user IS the recipient
+                        const isReceiverMe = (msg.receiverId && msg.receiverId === currentUserId) ||
+                                             (msg.receiverName && (msg.receiverName === userName || msg.receiverName === userDisplayName || msg.receiverName === userEmailPrefix));
+
+                        if (!isReceiverMe && (msg.receiverId || msg.receiverName)) {
+                            return; // DO NOT NOTIFY NON-RECIPIENTS
+                        }
+
+                        // Check freshness (must be under 45 seconds old)
                         let isFresh = true;
                         if (msg.timestamp) {
                             const msgTime = msg.timestamp.toDate ? msg.timestamp.toDate().getTime() : new Date(msg.timestamp).getTime();
@@ -410,7 +428,7 @@ export function setupRealtimeChatNotificationTrigger(userId, userName) {
                         const isActiveOnThisChat = isOverlayActive && activeChatUserName === sender;
                         const shouldNotify = !isActiveOnThisChat || document.hidden;
 
-                        if (!isSentByMe && isFresh && shouldNotify) {
+                        if (isFresh && shouldNotify) {
                             const title = `New message from ${sender} about ${product}`;
                             const body = msg.messageText || msg.text || 'Sent you a new message';
                             triggerNativeNotification(title, body, `#/messages`);

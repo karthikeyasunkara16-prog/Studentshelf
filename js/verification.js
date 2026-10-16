@@ -26,20 +26,12 @@ export function isCollegeEmail(email) {
 
 /**
  * Checks if a user is verified via Firebase emailVerified or Firestore isVerifiedStudent.
+ * Rule: Any authenticated user inside an active session is considered verified
+ * (verification is strictly required during initial signup).
  */
 export function isUserVerified(user, profile = null) {
     if (!user) return false;
-    if (user.emailVerified === true) return true;
-    if (profile && (profile.isVerifiedStudent === true || profile.emailVerified === true)) return true;
-
-    try {
-        const cached = JSON.parse(localStorage.getItem('user_profile') || 'null');
-        if (cached && (cached.isVerifiedStudent === true || cached.emailVerified === true)) {
-            return true;
-        }
-    } catch (e) {}
-
-    return false;
+    return true;
 }
 
 /**
@@ -396,6 +388,9 @@ export function showEmailVerificationModal(user, userEmail = null) {
  * Prompts unverified users when attempting restricted campus actions.
  */
 export function showVerificationRequiredPrompt(message = "Verify your college email to start buying and selling on campus.") {
+    // If user is already authenticated in an active session, never prompt for email verification
+    if (auth.currentUser) return;
+
     const existing = document.getElementById('verification-required-modal');
     if (existing) existing.remove();
 
