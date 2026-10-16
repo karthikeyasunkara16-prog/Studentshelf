@@ -514,7 +514,7 @@ class AppRouter {
                     if (widgetAvatar) widgetAvatar.src = guestImg;
                     if (dropdownAvatar) dropdownAvatar.src = guestImg;
                     if (dropdownName) dropdownName.textContent = 'Guest User';
-                    if (dropdownEmail) dropdownEmail.textContent = 'Pragati Engineering College';
+                    if (dropdownEmail) dropdownEmail.textContent = 'Verified College Student';
                     if (dropdownAuthActions) {
                         dropdownAuthActions.innerHTML = `
                             <a href="#/login" class="user-dropdown-item" id="login-btn"><i class="fa-solid fa-arrow-right-to-bracket"></i> Sign In</a>
@@ -1405,6 +1405,27 @@ document.addEventListener('click', function(e) {
     e.stopPropagation();
     if (typeof window.installApp === 'function') {
       window.installApp();
+    }
+  }
+});
+
+// Footer Email Support Click Handler (Reliable Gmail Web Compose with mailto fallback)
+document.addEventListener('click', function(e) {
+  const emailLink = e.target.closest('#footer-email-btn, .footer-mini-pill[href^="mailto:"]');
+  if (emailLink) {
+    e.preventDefault();
+    const supportEmail = 'studentshelf0@gmail.com';
+    const gmailUrl = `https://mail.google.com/mail/?view=cm&fs=1&to=${encodeURIComponent(supportEmail)}`;
+    const mailtoUrl = `mailto:${supportEmail}`;
+
+    try {
+      const composeTab = window.open(gmailUrl, '_blank', 'noopener,noreferrer');
+      if (!composeTab || composeTab.closed || typeof composeTab.closed === 'undefined') {
+        window.location.href = mailtoUrl;
+      }
+    } catch (err) {
+      console.warn('[Footer Support] Fallback to mailto link:', err);
+      window.location.href = mailtoUrl;
     }
   }
 });

@@ -67,7 +67,7 @@ export function generateOtpEmailHtml(otpCode, targetEmail = 'student', verificat
           <tr>
             <td style="border-top:1px solid #F1F5F9; background-color:#FAFAFA; padding:18px 24px; text-align:center;">
               <p style="margin:0 0 4px 0; color:#94A3B8; font-size:12px;">
-                StudentShelf • Pragati Engineering College Campus Community
+                StudentShelf • Verified College Campus Community
               </p>
               <p style="margin:0; color:#CBD5E1; font-size:11px;">
                 Automated security notification • Built by students, for students.

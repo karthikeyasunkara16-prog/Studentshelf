@@ -144,7 +144,7 @@ export async function renderHome(container) {
                     <div class="trust-icon-container"><i class="fa-solid fa-user-check"></i></div>
                     <div class="trust-text">
                         <h5>Verified Students</h5>
-                        <p>Exclusively for Pragati peers</p>
+                        <p>Exclusively for College peers</p>
                     </div>
                 </div>
                 <div class="trust-divider"></div>
