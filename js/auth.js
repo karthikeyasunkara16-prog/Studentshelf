@@ -1,6 +1,6 @@
 import { auth, createUserWithEmailAndPassword, signInWithEmailAndPassword, sendEmailVerification, signOut, sendPasswordResetEmail, applyActionCode, checkActionCode, isSignInWithEmailLink, signInWithEmailLink } from './firebase.js';
 import { saveUserProfile, getUserProfile, generateUserDocId, listenToPendingVerification } from './db.js';
-import { isCollegeEmail, isUserVerified, sendCollegeVerificationCode, sendInlineCollegeVerificationOtp, verifyInlineCollegeOtp, showInlineEmailOtpModal, showEmailVerificationModal, sendEmailOTP, requestVerification } from './verification.js';
+import { isCollegeEmail, isAcademicEmail, isUserVerified, sendCollegeVerificationCode, sendInlineCollegeVerificationOtp, verifyInlineCollegeOtp, showInlineEmailOtpModal, showEmailVerificationModal, sendEmailOTP, requestVerification } from './verification.js';
 
 export function renderLogin(container) {
     container.innerHTML = `
@@ -13,7 +13,7 @@ export function renderLogin(container) {
                     <input type="email" id="login-email" class="form-control" required placeholder="student@pragati.ac.in">
                     <small class="college-email-hint" style="display:block; margin-top:4px; font-size:12px; color:#64748B;">
                         <i class="fa-solid fa-graduation-cap" style="color:#00ABE4; margin-right:4px;"></i>
-                        Please use your official college email ID.
+                        Please enter your official college email ending with .ac.in or .edu.in for instant access.
                     </small>
                 </div>
                 <div class="form-group mb-2">
@@ -101,7 +101,7 @@ export function renderLogin(container) {
             hasError = true;
             firstInvalid = emailInput;
         } else if (!isCollegeEmail(email)) {
-            setLoginFieldError(emailInput, 'Please use your official college email ID (e.g. rollno@pragati.ac.in)');
+            setLoginFieldError(emailInput, 'Please enter your official college email ending with .ac.in or .edu.in for instant access.');
             hasError = true;
             firstInvalid = emailInput;
         }
@@ -190,7 +190,7 @@ export function renderLogin(container) {
         }
 
         if (!isCollegeEmail(targetEmail)) {
-            setLoginFieldError(emailInput, 'Please use a valid college email ending with .edu or .ac.in');
+            setLoginFieldError(emailInput, 'Please enter your official college email ending with .ac.in or .edu.in for instant access.');
             emailInput.focus();
             return;
         }
@@ -248,13 +248,13 @@ export function renderRegister(container) {
                     <input type="text" id="reg-name" class="form-control" required placeholder="e.g. Karthikeya Varma">
                 </div>
                 <div class="form-group">
-                    <label>College ID / Roll Number</label>
-                    <input type="text" id="reg-college-id" class="form-control" required placeholder="e.g. 21A31A0501">
+                    <label>College Roll Number / Branch</label>
+                    <input type="text" id="reg-college-id" class="form-control" required placeholder="e.g. 21A31A0501 (CSE)">
                 </div>
                 <div class="form-group">
                     <label>College Email ID</label>
                     <div class="email-verify-group">
-                        <input type="email" id="reg-email" class="form-control" required placeholder="rollno@pragati.ac.in">
+                        <input type="email" id="reg-email" class="form-control" required placeholder="yourname@college.ac.in (or .edu.in)">
                         <button type="button" class="btn btn-inline-verify" id="btn-verify-email">
                             <i class="fa-solid fa-envelope-circle-check"></i> Verify
                         </button>
@@ -267,7 +267,7 @@ export function renderRegister(container) {
                     </div>
                     <small class="college-email-hint text-muted" id="reg-email-hint">
                         <i class="fa-solid fa-graduation-cap" style="color:#00ABE4; margin-right:4px;"></i>
-                        Click "Verify" to send a verification link to your official college email.
+                        Please enter your official college email ending with .ac.in or .edu.in for instant access.
                     </small>
                 </div>
                 <div class="form-group">
@@ -518,7 +518,7 @@ export function renderRegister(container) {
                     onEmailSuccessfullyVerified(resolvedEmail.trim().toLowerCase());
                 } else {
                     localStorage.setItem('emailVerifiedStatus', 'true');
-                    onEmailSuccessfullyVerified('student@college.edu');
+                    onEmailSuccessfullyVerified('student@college.ac.in');
                 }
 
                 // Clean up URL parameters dynamically using replaceState without reloading the page
@@ -608,7 +608,7 @@ export function renderRegister(container) {
         }
     });
 
-    // BUG 1 FIX: Ensure Green Tick is strictly HIDDEN during input and initial state
+    // Real-time academic email validation and state handling
     emailInput.addEventListener('input', () => {
         if (typeof pendingUnsubscribe === 'function') {
             try { pendingUnsubscribe(); } catch (e) {}
@@ -634,12 +634,36 @@ export function renderRegister(container) {
         hintText.style.removeProperty('display');
         hintText.style.display = 'flex';
 
-        // Clear any error hint on email
-        clearFieldError(emailInput, emailInput.closest('.email-verify-group'));
+        const rawVal = emailInput.value.trim().toLowerCase();
+        const emailGroup = emailInput.closest('.email-verify-group') || emailInput;
+
+        // Inline check: Reject standard non-academic emails (e.g., @gmail.com, @yahoo.com)
+        if (rawVal.includes('@')) {
+            const domain = rawVal.split('@')[1] || '';
+            if (domain.includes('.') && !isCollegeEmail(rawVal)) {
+                setFieldError(emailInput, 'Please enter your official college email ending with .ac.in or .edu.in for instant access.', emailGroup);
+            } else if (isCollegeEmail(rawVal)) {
+                clearFieldError(emailInput, emailGroup);
+            }
+        } else {
+            clearFieldError(emailInput, emailGroup);
+        }
 
         submitBtn.disabled = false;
         submitIcon.className = 'fa-solid fa-shield-halved';
         submitText.textContent = 'Submit / Create Account';
+    });
+
+    emailInput.addEventListener('blur', () => {
+        const rawVal = emailInput.value.trim().toLowerCase();
+        const emailGroup = emailInput.closest('.email-verify-group') || emailInput;
+        if (rawVal) {
+            if (!isCollegeEmail(rawVal)) {
+                setFieldError(emailInput, 'Please enter your official college email ending with .ac.in or .edu.in for instant access.', emailGroup);
+            } else {
+                clearFieldError(emailInput, emailGroup);
+            }
+        }
     });
 
     // BUG 2 FIX: Trigger Verification Link via Firebase Auth & Open "Check Your Inbox" Screen
@@ -655,7 +679,7 @@ export function renderRegister(container) {
         }
 
         if (!isCollegeEmail(email)) {
-            setFieldError(emailInput, 'Please use an official college domain (e.g. rollno@pragati.ac.in or yourname@college.edu)', emailInput.closest('.email-verify-group'));
+            setFieldError(emailInput, 'Please enter your official college email ending with .ac.in or .edu.in for instant access.', emailInput.closest('.email-verify-group'));
             emailInput.focus();
             return;
         }
@@ -786,7 +810,7 @@ export function renderRegister(container) {
         if (!email) {
             markInvalid(emailInput, 'College Email is required', emailGroup);
         } else if (!isCollegeEmail(email)) {
-            markInvalid(emailInput, 'Please enter a valid college email (.edu or .ac.in)', emailGroup);
+            markInvalid(emailInput, 'Please enter your official college email ending with .ac.in or .edu.in for instant access.', emailGroup);
         } else if (!isEmailVerified || !isEmailVerifiedInline || email !== verifiedEmailAddress) {
             markInvalid(emailInput, 'Please verify your college email using the Verify button first', emailGroup);
         }

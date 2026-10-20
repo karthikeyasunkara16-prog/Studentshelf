@@ -5,8 +5,9 @@ import { sendCustomOtpEmail, sendEmailOTP, requestVerification } from './emailSe
 export { sendEmailOTP, requestVerification };
 
 /**
- * Validates whether an email belongs to a recognized college or educational domain.
- * Supports .edu, .ac.in, .edu.in, and campus domains like pragati.ac.in.
+ * Validates whether an email belongs to an official academic domain ending in .ac.in or .edu.in.
+ * Supports all official student domains (e.g. @pragati.ac.in, @jntuk.edu.in, @aditya.ac.in).
+ * Rejects standard non-academic emails (e.g. @gmail.com, @yahoo.com).
  */
 export function isCollegeEmail(email) {
     if (!email || typeof email !== 'string') return false;
@@ -15,14 +16,10 @@ export function isCollegeEmail(email) {
     if (!emailRegex.test(clean)) return false;
 
     const domain = clean.split('@')[1] || '';
-    return domain.endsWith('.edu') ||
-           domain.endsWith('.ac.in') ||
-           domain.endsWith('.edu.in') ||
-           domain.includes('college') ||
-           domain.includes('campus') ||
-           domain.includes('university') ||
-           domain === 'pragati.ac.in';
+    return domain.endsWith('.ac.in') || domain.endsWith('.edu.in');
 }
+
+export const isAcademicEmail = isCollegeEmail;
 
 /**
  * Checks if a user is verified via Firebase emailVerified or Firestore isVerifiedStudent.
