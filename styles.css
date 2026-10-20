@@ -6709,6 +6709,274 @@ body,
   }
 }
 
+/* =====================================================
+   MULTI-IMAGE UPLOAD & COMPRESSION (ADD LISTING)
+   ===================================================== */
+.multi-img-upload-box {
+  width: 100%;
+  margin-top: 6px;
+}
+
+.upload-dropzone-inner {
+  border: 2px dashed #CBD5E1;
+  background: #F8FAFC;
+  border-radius: 14px;
+  padding: 22px 16px;
+  text-align: center;
+  cursor: pointer;
+  transition: all 0.25s ease;
+  user-select: none;
+}
+
+.upload-dropzone-inner:hover,
+.upload-dropzone-inner.dragover {
+  border-color: #00ABE4 !important;
+  background: #EFF6FF !important;
+  transform: translateY(-1px);
+}
+
+.upload-dropzone-inner.is-invalid {
+  border-color: #DC2626 !important;
+  background: #FEF2F2 !important;
+}
+
+.selected-imgs-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(84px, 1fr));
+  gap: 10px;
+  margin-top: 10px;
+}
+
+.selected-img-card {
+  position: relative;
+  width: 100%;
+  aspect-ratio: 1;
+  border-radius: 10px;
+  overflow: hidden;
+  border: 1.5px solid #E2E8F0;
+  background: #F1F5F9;
+  box-shadow: 0 2px 6px rgba(0, 0, 0, 0.05);
+  animation: fadeInScale 0.2s ease-out;
+}
+
+@keyframes fadeInScale {
+  from { opacity: 0; transform: scale(0.9); }
+  to { opacity: 1; transform: scale(1); }
+}
+
+.selected-img-card img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  display: block;
+}
+
+.img-cover-badge {
+  position: absolute;
+  bottom: 4px;
+  left: 4px;
+  background: #00ABE4;
+  color: #FFFFFF;
+  font-size: 9.5px;
+  font-weight: 700;
+  padding: 2px 5px;
+  border-radius: 4px;
+  letter-spacing: 0.2px;
+  pointer-events: none;
+}
+
+.img-remove-btn {
+  position: absolute;
+  top: 4px;
+  right: 4px;
+  width: 22px;
+  height: 22px;
+  background: rgba(15, 23, 42, 0.75);
+  color: #FFFFFF;
+  border: none;
+  border-radius: 50%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 11px;
+  cursor: pointer;
+  transition: all 0.2s ease;
+  line-height: 1;
+  padding: 0;
+}
+
+.img-remove-btn:hover {
+  background: #DC2626;
+  transform: scale(1.15);
+}
+
+.add-more-img-card {
+  aspect-ratio: 1;
+  border: 2px dashed #CBD5E1;
+  background: #F8FAFC;
+  border-radius: 10px;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 4px;
+  color: #00ABE4;
+  cursor: pointer;
+  font-size: 11px;
+  font-weight: 700;
+  transition: all 0.2s ease;
+}
+
+.add-more-img-card:hover {
+  border-color: #00ABE4;
+  background: #EFF6FF;
+  transform: translateY(-1px);
+}
+
+.add-more-img-card i {
+  font-size: 18px;
+}
+
+.img-compress-spinner {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 8px 12px;
+  background: #EFF6FF;
+  border: 1px solid #BFDBFE;
+  border-radius: 8px;
+  color: #0284C7;
+  font-size: 12px;
+  font-weight: 600;
+}
+
+/* =====================================================
+   PRODUCT DETAILS MULTI-IMAGE SHOWCASE GALLERY
+   ===================================================== */
+.product-gallery-showcase {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  width: 100%;
+}
+
+.gallery-photo-counter {
+  position: absolute;
+  top: 12px;
+  right: 12px;
+  background: rgba(15, 23, 42, 0.75);
+  color: #FFFFFF;
+  font-size: 11.5px;
+  font-weight: 700;
+  padding: 4px 10px;
+  border-radius: 20px;
+  backdrop-filter: blur(4px);
+  display: flex;
+  align-items: center;
+  gap: 5px;
+  z-index: 5;
+  pointer-events: none;
+}
+
+.gallery-nav-btn {
+  position: absolute;
+  top: 50%;
+  transform: translateY(-50%);
+  width: 38px;
+  height: 38px;
+  border-radius: 50%;
+  background: rgba(255, 255, 255, 0.95);
+  color: #1E293B;
+  border: 1px solid #E2E8F0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.15);
+  transition: all 0.2s ease;
+  z-index: 5;
+}
+
+.gallery-nav-btn:hover {
+  background: #00ABE4;
+  color: #FFFFFF;
+  border-color: #00ABE4;
+  transform: translateY(-50%) scale(1.08);
+}
+
+.gallery-prev-btn { left: 10px; }
+.gallery-next-btn { right: 10px; }
+
+.product-thumbnails-strip {
+  display: flex;
+  gap: 10px;
+  overflow-x: auto;
+  padding: 4px 2px 8px 2px;
+  scroll-behavior: smooth;
+}
+
+.product-thumbnails-strip::-webkit-scrollbar {
+  height: 4px;
+}
+
+.product-thumbnails-strip::-webkit-scrollbar-thumb {
+  background: #CBD5E1;
+  border-radius: 10px;
+}
+
+.product-thumb-btn {
+  width: 62px;
+  height: 62px;
+  min-width: 62px;
+  border-radius: 10px;
+  border: 2px solid #E2E8F0;
+  padding: 0;
+  background: #F1F5F9;
+  cursor: pointer;
+  overflow: hidden;
+  transition: all 0.2s ease;
+  opacity: 0.65;
+}
+
+.product-thumb-btn img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  display: block;
+}
+
+.product-thumb-btn:hover {
+  opacity: 0.95;
+  border-color: #94A3B8;
+  transform: translateY(-2px);
+}
+
+.product-thumb-btn.active {
+  opacity: 1;
+  border-color: #00ABE4;
+  box-shadow: 0 0 0 2px rgba(0, 171, 228, 0.25);
+  transform: scale(1.05);
+}
+
+/* Home / Card Multi-Image Badge */
+.card-multi-img-badge {
+  position: absolute;
+  top: 10px;
+  left: 10px;
+  background: rgba(15, 23, 42, 0.75);
+  color: #FFFFFF;
+  font-size: 11px;
+  font-weight: 700;
+  padding: 3px 8px;
+  border-radius: 12px;
+  backdrop-filter: blur(4px);
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  z-index: 2;
+  pointer-events: none;
+}
+
 
 
 

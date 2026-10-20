@@ -366,10 +366,18 @@ async function loadAndRenderListings() {
                 `<span class="ecom-category-chip"><i class="fa-solid fa-tag"></i> ${c}</span>`
             ).join(' ');
 
+            const coverImg = (Array.isArray(item.imageUrls) && item.imageUrls.length > 0)
+                ? item.imageUrls[0]
+                : (item.imageUrl || 'https://images.unsplash.com/photo-1544716278-ca5e3f4abd8c?auto=format&fit=crop&w=600&h=450&q=80');
+            const multiImgBadge = (Array.isArray(item.imageUrls) && item.imageUrls.length > 1)
+                ? `<span class="card-multi-img-badge"><i class="fa-solid fa-images"></i> ${item.imageUrls.length}</span>`
+                : '';
+
             card.innerHTML = `
                 <!-- Product Image Inner Canvas Frame -->
                 <div class="product-image-wrapper ecom-card-img-frame card-image-wrapper product-image-container">
-                    <img class="ecom-card-img product-image" src="${item.imageUrl || 'https://images.unsplash.com/photo-1544716278-ca5e3f4abd8c?auto=format&fit=crop&w=600&h=450&q=80'}" alt="${item.title}" loading="lazy" style="${isSold ? 'filter: grayscale(1) opacity(0.5);' : ''}">
+                    <img class="ecom-card-img product-image" src="${coverImg}" alt="${item.title}" loading="lazy" style="${isSold ? 'filter: grayscale(1) opacity(0.5);' : ''}">
+                    ${multiImgBadge}
                     <button type="button" class="ecom-wishlist-btn ${isWishlisted ? 'active' : ''}" data-id="${item.id}" aria-label="Save to wishlist">
                         <i class="fa-${isWishlisted ? 'solid' : 'regular'} fa-heart"></i>
                     </button>

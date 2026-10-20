@@ -1,6 +1,7 @@
 import { addListing, getRequests, createNotification, getUserProfile } from './db.js';
 import { auth } from './firebase.js';
 import { isUserVerified, showVerificationRequiredPrompt } from './verification.js';
+import { compressImage } from './imageUtils.js';
 
 export async function showAddListingModal() {
     const user = auth.currentUser;
@@ -19,53 +20,45 @@ export async function showAddListingModal() {
     const modalHtml = `
         <div id="${modalId}" class="modal-overlay active">
             <div class="modal-container modal-content" style="max-width: 600px;">
-                <button class="modal-close" id="close-listing-modal">&times;</button>
-                <h2 class="modal-title text-center"><i class="fa-solid fa-plus-circle"></i> Add New Listing</h2>
+                <div class="modal-header">
+                    <h3><i class="fa-solid fa-tag"></i> Post an Item to Shelf</h3>
+                    <button class="modal-close" id="close-listing-modal">&times;</button>
+                </div>
                 
-                <form id="add-form">
-                    <!-- Step 1: Item Details -->
+                <form id="add-form" novalidate>
+                    <!-- Step 1: Details -->
                     <div id="step-1" class="form-step active">
                         <div class="form-group">
-                            <label>Item Name</label>
-                            <input type="text" id="item-title" class="form-control" placeholder="e.g., Engineering Drawing Kit">
+                            <label>Item Name / Title</label>
+                            <input type="text" id="item-title" class="form-control" placeholder="e.g., Engineering Mathematics - Vol 1">
                         </div>
                         <div class="form-group">
-                            <label style="display:flex; justify-content:space-between; align-items:center;">
-                                <span>Categories <span style="font-size:12px; font-weight:normal; color:#64748B;">(Select all that apply)</span></span>
-                                <span id="selected-cats-count" style="font-size:12px; font-weight:600; color:#00ABE4;">0 selected</span>
-                            </label>
-                            <div class="multi-category-selector" id="item-categories-selector">
+                            <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:6px;">
+                                <label style="margin-bottom:0;">Categories <span class="text-muted" style="font-size:12px; font-weight:normal;">(Select all relevant tags)</span></label>
+                                <span id="selected-cats-count" class="badge-mini" style="font-size:11px; background:#EFF6FF; color:#00ABE4; padding:2px 8px; border-radius:10px; font-weight:600;">0 selected</span>
+                            </div>
+                            
+                            <!-- Multi-Category Tag Pills Selector -->
+                            <div class="category-checkbox-group" id="item-categories-selector">
                                 <label class="category-checkbox-pill" data-category="Books & Notes">
-                                    <input type="checkbox" name="item-categories" value="Books & Notes" class="category-checkbox-input">
-                                    <span class="category-pill-box">
-                                        <i class="fa-solid fa-book-open"></i>
-                                        <span>Books & Notes</span>
-                                        <i class="fa-solid fa-check check-indicator"></i>
-                                    </span>
+                                    <input type="checkbox" name="item-categories" value="Books & Notes">
+                                    <span class="pill-check"><i class="fa-solid fa-check"></i></span>
+                                    <span class="pill-text"><i class="fa-solid fa-book"></i> Books & Notes</span>
                                 </label>
                                 <label class="category-checkbox-pill" data-category="Electronics">
-                                    <input type="checkbox" name="item-categories" value="Electronics" class="category-checkbox-input">
-                                    <span class="category-pill-box">
-                                        <i class="fa-solid fa-laptop"></i>
-                                        <span>Electronics</span>
-                                        <i class="fa-solid fa-check check-indicator"></i>
-                                    </span>
+                                    <input type="checkbox" name="item-categories" value="Electronics">
+                                    <span class="pill-check"><i class="fa-solid fa-check"></i></span>
+                                    <span class="pill-text"><i class="fa-solid fa-laptop"></i> Electronics</span>
                                 </label>
                                 <label class="category-checkbox-pill" data-category="Lab Gear">
-                                    <input type="checkbox" name="item-categories" value="Lab Gear" class="category-checkbox-input">
-                                    <span class="category-pill-box">
-                                        <i class="fa-solid fa-microscope"></i>
-                                        <span>Lab Gear</span>
-                                        <i class="fa-solid fa-check check-indicator"></i>
-                                    </span>
+                                    <input type="checkbox" name="item-categories" value="Lab Gear">
+                                    <span class="pill-check"><i class="fa-solid fa-check"></i></span>
+                                    <span class="pill-text"><i class="fa-solid fa-flask"></i> Lab Gear</span>
                                 </label>
                                 <label class="category-checkbox-pill" data-category="Hostel">
-                                    <input type="checkbox" name="item-categories" value="Hostel" class="category-checkbox-input">
-                                    <span class="category-pill-box">
-                                        <i class="fa-solid fa-house"></i>
-                                        <span>Hostel</span>
-                                        <i class="fa-solid fa-check check-indicator"></i>
-                                    </span>
+                                    <input type="checkbox" name="item-categories" value="Hostel">
+                                    <span class="pill-check"><i class="fa-solid fa-check"></i></span>
+                                    <span class="pill-text"><i class="fa-solid fa-bed"></i> Hostel</span>
                                 </label>
                             </div>
                         </div>
@@ -86,10 +79,33 @@ export async function showAddListingModal() {
                             <label>Item Description</label>
                             <textarea id="item-desc" class="form-control" rows="3" placeholder="Describe the item..."></textarea>
                         </div>
+
+                        <!-- Multi-Image Upload Area with Client-Side Compression -->
                         <div class="form-group">
-                            <label>Image</label>
-                            <input type="file" id="item-img" class="form-control" accept="image/*">
+                            <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:6px;">
+                                <label style="margin-bottom:0;">Item Photos <span class="text-muted" style="font-size:12px; font-weight:normal;">(Up to 5 photos)</span></label>
+                                <span id="img-count-badge" style="font-size:11.5px; background:#EFF6FF; color:#00ABE4; padding:2px 8px; border-radius:10px; font-weight:700;">0/5 selected</span>
+                            </div>
+
+                            <div class="multi-img-upload-box" id="upload-box-wrapper">
+                                <input type="file" id="item-img-input" accept="image/*" multiple style="display:none;">
+                                <div class="upload-dropzone-inner" id="upload-dropzone" role="button" tabindex="0">
+                                    <i class="fa-solid fa-cloud-arrow-up" style="font-size:26px; color:#00ABE4; margin-bottom:6px; display:block;"></i>
+                                    <div style="font-size:13.5px; font-weight:600; color:#1E293B;">Click to select or drag & drop photos</div>
+                                    <div style="font-size:11.5px; color:#64748B; margin-top:2px;">PNG, JPG, JPEG, WEBP • Auto-compressed strictly under 200 KB</div>
+                                </div>
+                            </div>
+
+                            <!-- Selected Thumbnails Grid -->
+                            <div id="selected-imgs-grid" class="selected-imgs-grid" style="display:none;"></div>
+
+                            <!-- Compression Loading Spinner -->
+                            <div id="img-compress-spinner" class="img-compress-spinner mt-2" style="display:none;">
+                                <i class="fa-solid fa-spinner fa-spin"></i>
+                                <span id="compress-spinner-text">Optimizing photos for instant campus loading...</span>
+                            </div>
                         </div>
+
                         <button type="button" class="btn btn-primary w-100 mt-4" id="next-step-btn">Next: Preview & Confirm</button>
                     </div>
 
@@ -100,8 +116,14 @@ export async function showAddListingModal() {
                             <p><strong>Item:</strong> <span id="summary-title">-</span></p>
                             <p><strong>Price:</strong> ₹<span id="summary-price">-</span></p>
                             <p><strong>Categories:</strong> <span id="summary-cat">-</span></p>
-                            <div id="summary-img-prev" class="mt-2" style="width: 100%; height: 150px; background: #000; border-radius: 8px; overflow: hidden; display: none;">
-                                <img id="preview-img-tag" src="" style="width:100%; height:100%; object-fit:cover;">
+                            
+                            <!-- Multi-Image Preview Container in Step 2 -->
+                            <div id="summary-img-prev" class="mt-2" style="display:none;">
+                                <div style="width: 100%; height: 180px; background: #0F172A; border-radius: 10px; overflow: hidden; position: relative;">
+                                    <img id="preview-img-tag" src="" style="width:100%; height:100%; object-fit:contain;">
+                                    <span id="summary-photo-count-badge" style="position:absolute; bottom:8px; right:8px; background:rgba(0,0,0,0.7); color:#fff; font-size:11px; font-weight:700; padding:2px 8px; border-radius:10px; backdrop-filter:blur(4px);">1 Photo</span>
+                                </div>
+                                <div id="summary-thumbnails-row" style="display:flex; gap:8px; margin-top:8px; overflow-x:auto;"></div>
                             </div>
                         </div>
 
@@ -175,9 +197,20 @@ export async function showAddListingModal() {
     const priceInput = modal.querySelector('#item-price');
     const conditionInput = modal.querySelector('#item-condition');
     const descInput = modal.querySelector('#item-desc');
-    const imgInput = modal.querySelector('#item-img');
     const catSelector = modal.querySelector('#item-categories-selector');
     
+    // Multi-Image Elements
+    const fileInput = modal.querySelector('#item-img-input');
+    const dropzone = modal.querySelector('#upload-dropzone');
+    const imgsGrid = modal.querySelector('#selected-imgs-grid');
+    const imgCountBadge = modal.querySelector('#img-count-badge');
+    const compressSpinner = modal.querySelector('#img-compress-spinner');
+    const compressSpinnerText = modal.querySelector('#compress-spinner-text');
+
+    // State for selected compressed images: [{ id, dataUrl, sizeKb }]
+    let selectedImages = [];
+    let isCompressing = false;
+
     // Multi-Category Helpers
     const getSelectedCategories = () => {
         const checkedInputs = modal.querySelectorAll('input[name="item-categories"]:checked');
@@ -209,16 +242,137 @@ export async function showAddListingModal() {
         cb.addEventListener('change', updateCategoryPillStates);
     });
 
+    // Render Thumbnails Grid with Cover Badges and Remove 'X' buttons
+    const renderThumbnailsGrid = () => {
+        if (!imgsGrid) return;
+        imgsGrid.innerHTML = '';
+
+        if (imgCountBadge) {
+            imgCountBadge.textContent = `${selectedImages.length}/5 selected`;
+        }
+
+        if (selectedImages.length === 0) {
+            imgsGrid.style.display = 'none';
+            if (dropzone) dropzone.style.display = 'block';
+            return;
+        }
+
+        imgsGrid.style.display = 'grid';
+        if (dropzone) dropzone.style.display = 'none';
+
+        selectedImages.forEach((imgObj, idx) => {
+            const card = document.createElement('div');
+            card.className = 'selected-img-card';
+            card.innerHTML = `
+                <img src="${imgObj.dataUrl}" alt="Photo ${idx + 1}" loading="lazy">
+                ${idx === 0 ? '<span class="img-cover-badge">★ Cover</span>' : ''}
+                <button type="button" class="img-remove-btn" title="Remove Photo" data-id="${imgObj.id}">&times;</button>
+            `;
+
+            card.querySelector('.img-remove-btn').addEventListener('click', (e) => {
+                e.stopPropagation();
+                selectedImages = selectedImages.filter(item => item.id !== imgObj.id);
+                renderThumbnailsGrid();
+            });
+
+            imgsGrid.appendChild(card);
+        });
+
+        // "+ Add Photo" button if fewer than 5 images selected
+        if (selectedImages.length < 5) {
+            const addMoreCard = document.createElement('div');
+            addMoreCard.className = 'add-more-img-card';
+            addMoreCard.innerHTML = `
+                <i class="fa-solid fa-plus"></i>
+                <span>Add Photo</span>
+            `;
+            addMoreCard.addEventListener('click', () => {
+                if (fileInput) fileInput.click();
+            });
+            imgsGrid.appendChild(addMoreCard);
+        }
+    };
+
+    // Process & compress selected files
+    const handleFilesSelected = async (files) => {
+        clearFieldError(dropzone, dropzone);
+        if (!files || files.length === 0) return;
+
+        const remainingSlots = 5 - selectedImages.length;
+        if (remainingSlots <= 0) {
+            alert("Maximum 5 photos allowed per listing.");
+            return;
+        }
+
+        const filesToProcess = Array.from(files).filter(f => f.type && f.type.startsWith('image/')).slice(0, remainingSlots);
+        if (filesToProcess.length === 0) {
+            setFieldError(dropzone, 'Please select valid image files (PNG, JPG, WEBP).', dropzone);
+            return;
+        }
+
+        isCompressing = true;
+        if (compressSpinner) compressSpinner.style.display = 'flex';
+
+        try {
+            for (let i = 0; i < filesToProcess.length; i++) {
+                if (compressSpinnerText) {
+                    compressSpinnerText.textContent = `Optimizing photo ${i + 1} of ${filesToProcess.length}...`;
+                }
+                const compressed = await compressImage(filesToProcess[i]);
+                selectedImages.push({
+                    id: 'img_' + Date.now() + '_' + Math.random().toString(36).substr(2, 6),
+                    dataUrl: compressed.dataUrl,
+                    sizeKb: compressed.sizeKb
+                });
+            }
+            renderThumbnailsGrid();
+            clearFieldError(dropzone, dropzone);
+        } catch (err) {
+            console.error("Compression error:", err);
+            setFieldError(dropzone, 'Failed to optimize images: ' + err.message, dropzone);
+        } finally {
+            isCompressing = false;
+            if (compressSpinner) compressSpinner.style.display = 'none';
+            if (fileInput) fileInput.value = ''; // Reset file input to allow re-selection
+        }
+    };
+
+    // File Input change listener
+    if (fileInput) {
+        fileInput.addEventListener('change', (e) => {
+            handleFilesSelected(e.target.files);
+        });
+    }
+
+    // Dropzone Click & Drag-Drop listeners
+    if (dropzone) {
+        dropzone.addEventListener('click', () => {
+            if (fileInput) fileInput.click();
+        });
+
+        dropzone.addEventListener('dragover', (e) => {
+            e.preventDefault();
+            dropzone.classList.add('dragover');
+        });
+
+        dropzone.addEventListener('dragleave', () => {
+            dropzone.classList.remove('dragover');
+        });
+
+        dropzone.addEventListener('drop', (e) => {
+            e.preventDefault();
+            dropzone.classList.remove('dragover');
+            if (e.dataTransfer && e.dataTransfer.files) {
+                handleFilesSelected(e.dataTransfer.files);
+            }
+        });
+    }
+
     // Real-Time Clearing Listeners
     titleInput.addEventListener('input', () => clearFieldError(titleInput));
     priceInput.addEventListener('input', () => clearFieldError(priceInput));
     conditionInput.addEventListener('change', () => clearFieldError(conditionInput));
     descInput.addEventListener('input', () => clearFieldError(descInput));
-    imgInput.addEventListener('change', () => {
-        if (imgInput.files && imgInput.files.length > 0) {
-            clearFieldError(imgInput);
-        }
-    });
 
     // Reset Logic: Ensure Step 1 is active on start
     const resetForm = () => {
@@ -226,6 +380,8 @@ export async function showAddListingModal() {
         clearAllFieldErrors(step1);
         clearAllFieldErrors(step2);
         updateCategoryPillStates();
+        selectedImages = [];
+        renderThumbnailsGrid();
         step1.classList.add('active');
         step2.classList.remove('active');
         errDiv.textContent = '';
@@ -249,7 +405,6 @@ export async function showAddListingModal() {
         const condition = conditionInput.value;
         const desc = descInput.value.trim();
         const selectedCategories = getSelectedCategories();
-        const imgFile = imgInput.files && imgInput.files[0];
 
         let hasError = false;
         let firstInvalid = null;
@@ -287,9 +442,14 @@ export async function showAddListingModal() {
             markInvalid(descInput, 'Item description is required');
         }
 
-        // 6. Image selection
-        if (!imgFile) {
-            markInvalid(imgInput, 'Please upload at least one image of the item');
+        // 6. Image selection & compression check
+        if (isCompressing) {
+            alert('Please wait for photos to finish optimizing.');
+            return;
+        }
+
+        if (selectedImages.length === 0) {
+            markInvalid(dropzone, 'Please upload at least one image of the item', dropzone);
         }
 
         if (hasError) {
@@ -302,17 +462,41 @@ export async function showAddListingModal() {
             return;
         }
 
-        // Fill Summary
+        // Fill Summary for Step 2
         modal.querySelector('#summary-title').textContent = title;
         modal.querySelector('#summary-price').textContent = price;
         modal.querySelector('#summary-cat').textContent = selectedCategories.join(', ');
 
-        const reader = new FileReader();
-        reader.onload = (e) => {
-            modal.querySelector('#preview-img-tag').src = e.target.result;
-            modal.querySelector('#summary-img-prev').style.display = 'block';
-        };
-        reader.readAsDataURL(imgFile);
+        const previewImgTag = modal.querySelector('#preview-img-tag');
+        const summaryImgPrev = modal.querySelector('#summary-img-prev');
+        const summaryPhotoCountBadge = modal.querySelector('#summary-photo-count-badge');
+        const summaryThumbnailsRow = modal.querySelector('#summary-thumbnails-row');
+
+        if (selectedImages.length > 0 && previewImgTag) {
+            previewImgTag.src = selectedImages[0].dataUrl;
+            summaryImgPrev.style.display = 'block';
+
+            if (summaryPhotoCountBadge) {
+                summaryPhotoCountBadge.textContent = `${selectedImages.length} Photo${selectedImages.length > 1 ? 's' : ''}`;
+            }
+
+            if (summaryThumbnailsRow) {
+                summaryThumbnailsRow.innerHTML = '';
+                if (selectedImages.length > 1) {
+                    selectedImages.forEach((imgObj, idx) => {
+                        const thumb = document.createElement('img');
+                        thumb.src = imgObj.dataUrl;
+                        thumb.style.cssText = `width: 48px; height: 48px; object-fit: cover; border-radius: 6px; cursor: pointer; border: 2px solid ${idx === 0 ? '#00ABE4' : '#CBD5E1'}; transition: all 0.2s;`;
+                        thumb.addEventListener('click', () => {
+                            previewImgTag.src = imgObj.dataUrl;
+                            summaryThumbnailsRow.querySelectorAll('img').forEach(el => el.style.borderColor = '#CBD5E1');
+                            thumb.style.borderColor = '#00ABE4';
+                        });
+                        summaryThumbnailsRow.appendChild(thumb);
+                    });
+                }
+            }
+        }
 
         errDiv.textContent = "";
         step1.classList.remove('active');
@@ -329,17 +513,17 @@ export async function showAddListingModal() {
         e.preventDefault();
         
         try {
-            addBtn.disabled = true;
-            addBtn.textContent = 'Publishing...';
-            
-            const fileInput = modal.querySelector('#item-img');
-            const base64Image = await new Promise((resolve, reject) => {
-                const reader = new FileReader();
-                reader.onload = e => resolve(e.target.result);
-                reader.onerror = () => reject(new Error('Image processing failed'));
-                reader.readAsDataURL(fileInput.files[0]);
-            });
+            if (isCompressing) {
+                throw new Error("Photos are currently being optimized. Please wait a moment.");
+            }
 
+            if (selectedImages.length === 0) {
+                throw new Error("Please upload at least one image of the item.");
+            }
+
+            addBtn.disabled = true;
+            addBtn.innerHTML = '<i class="fa-solid fa-spinner fa-spin"></i> Publishing...';
+            
             const profile = await getUserProfile(user.uid);
             if (!profile || !profile.whatsappNumber) {
                 throw new Error("WhatsApp number missing! Please update your profile.");
@@ -350,7 +534,10 @@ export async function showAddListingModal() {
                 throw new Error("Please select at least one category tag.");
             }
 
-            // Store categories as an array and retain backward compatibility
+            // Extract array of compressed image strings
+            const imageUrls = selectedImages.map(img => img.dataUrl);
+
+            // Store categories and compressed images array, with imageUrl backward compatibility
             const data = {
                 title: modal.querySelector('#item-title').value.trim(),
                 categories: selectedCategories, // e.g. ["Electronics", "Hostel"]
@@ -358,7 +545,8 @@ export async function showAddListingModal() {
                 price: Number(modal.querySelector('#item-price').value),
                 condition: modal.querySelector('#item-condition').value,
                 description: modal.querySelector('#item-desc').value.trim(),
-                imageUrl: base64Image,
+                imageUrl: imageUrls[0], // primary cover image
+                imageUrls: imageUrls,   // full array of compressed photos (each < 190 KB)
                 sellerName: profile.displayName || "Student",
                 whatsapp: profile.whatsappNumber,
                 sellerId: user.uid,
@@ -371,7 +559,7 @@ export async function showAddListingModal() {
             
             modal.querySelector('#add-success').style.display = 'block';
             
-            // Notification Logic (same as before)
+            // Notification Logic
             const requests = await getRequests();
             const keywords = data.title.toLowerCase().split(/\s+/).filter(k => k.length > 2);
             const matches = requests.filter(req => keywords.some(kw => req.itemName.toLowerCase().includes(kw)));
@@ -384,51 +572,16 @@ export async function showAddListingModal() {
                     modal.remove();
                     window.location.hash = '#/';
                     window.location.reload(); // Refresh to see new item
-                }, 1500);
+                }, 1200);
             }
 
         } catch (err) {
-            errDiv.textContent = err.message;
+            console.error("Listing publish error:", err);
+            errDiv.textContent = err.message || 'Failed to publish listing. Please try again.';
             addBtn.disabled = false;
-            addBtn.textContent = 'Publish Listing';
+            addBtn.innerHTML = 'Publish Listing';
         }
     });
 
-    // Add CSS transition for focus
     document.body.style.overflow = 'hidden';
-}
-
-function showMatchModal(match, listingId, itemTitle) {
-    const modalId = 'match-notify-modal';
-    const modalHtml = `
-        <div id="${modalId}" class="modal-overlay active">
-            <div class="modal-content text-center" style="border: var(--border-subtle); background: var(--card-surface); max-width: 450px;">
-                <div style="font-size: 3rem; margin-bottom: 15px;">🎉</div>
-                <h2 class="modal-title" style="color: var(--primary-brand)">Match Found!</h2>
-                <p class="mb-4"><strong>${match.requesterName}</strong> wants <strong>"${match.itemName}"</strong>. Your listing is a match!</p>
-                
-                <div class="hero-buttons" style="flex-direction: column; gap: 10px;">
-                    <button id="notify-wa-btn" class="btn btn-accent w-100">
-                        <i class="fa-brands fa-whatsapp"></i> Notify Buyer
-                    </button>
-                    <button id="close-match-btn" class="btn btn-outline w-100">Close</button>
-                </div>
-            </div>
-        </div>
-    `;
-    document.body.insertAdjacentHTML('beforeend', modalHtml);
-    const modal = document.getElementById(modalId);
-    
-    modal.querySelector('#notify-wa-btn').addEventListener('click', async () => {
-        const waLink = `https://wa.me/${match.requesterWhatsApp.replace(/\D/g,'')}?text=${encodeURIComponent("Hi, I have the item you requested on StudentShelf!")}`;
-        await createNotification(match.requesterId || match.requesterEmail, listingId, itemTitle);
-        window.open(waLink, '_blank');
-        modal.remove();
-        window.location.hash = '#/';
-    });
-
-    modal.querySelector('#close-match-btn').addEventListener('click', () => {
-        modal.remove();
-        window.location.hash = '#/';
-    });
 }

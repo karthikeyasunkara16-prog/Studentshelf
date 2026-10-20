@@ -202,6 +202,10 @@ export async function renderItemDetail(container, id) {
             `;
         }
 
+        const imagesList = (Array.isArray(item.imageUrls) && item.imageUrls.length > 0)
+            ? item.imageUrls
+            : (item.imageUrl ? [item.imageUrl] : ['https://images.unsplash.com/photo-1544716278-ca5e3f4abd8c?auto=format&fit=crop&w=800&h=600&q=80']);
+
         // Render Premium 2-Column Product Showcase
         content.innerHTML = `
             <!-- Dynamic Breadcrumbs -->
@@ -217,14 +221,40 @@ export async function renderItemDetail(container, id) {
             <div class="product-showcase-card shadow-card">
                 <div class="product-showcase-grid">
                     
-                    <!-- LEFT COLUMN: Product Image Frame -->
-                    <div class="product-image-showcase card-image-wrapper">
-                        <img src="${item.imageUrl || 'https://images.unsplash.com/photo-1544716278-ca5e3f4abd8c?auto=format&fit=crop&w=800&h=600&q=80'}" 
-                             alt="${escapeHtml(item.title)}" 
-                             class="product-showcase-img can-zoom" 
-                             style="${isSold ? 'filter: grayscale(1) opacity(0.5);' : ''}" 
-                             loading="lazy">
-                        ${isSold ? '<div class="ecom-sold-overlay">SOLD</div>' : ''}
+                    <!-- LEFT COLUMN: Product Image Gallery -->
+                    <div class="product-gallery-showcase">
+                        <div class="product-image-showcase card-image-wrapper" id="main-gallery-frame">
+                            <img src="${imagesList[0]}" 
+                                 alt="${escapeHtml(item.title)}" 
+                                 class="product-showcase-img can-zoom" 
+                                 id="product-main-showcase-img"
+                                 style="${isSold ? 'filter: grayscale(1) opacity(0.5);' : ''}" 
+                                 loading="lazy">
+                            
+                            ${imagesList.length > 1 ? `
+                                <div class="gallery-photo-counter" id="gallery-photo-counter">
+                                    <i class="fa-solid fa-camera"></i> <span id="gallery-current-idx">1</span> / ${imagesList.length}
+                                </div>
+                                <button type="button" class="gallery-nav-btn gallery-prev-btn" id="gallery-prev-btn" aria-label="Previous photo">
+                                    <i class="fa-solid fa-chevron-left"></i>
+                                </button>
+                                <button type="button" class="gallery-nav-btn gallery-next-btn" id="gallery-next-btn" aria-label="Next photo">
+                                    <i class="fa-solid fa-chevron-right"></i>
+                                </button>
+                            ` : ''}
+
+                            ${isSold ? '<div class="ecom-sold-overlay">SOLD</div>' : ''}
+                        </div>
+
+                        ${imagesList.length > 1 ? `
+                            <div class="product-thumbnails-strip" id="product-thumbnails-strip">
+                                ${imagesList.map((imgUrl, idx) => `
+                                    <button type="button" class="product-thumb-btn ${idx === 0 ? 'active' : ''}" data-idx="${idx}" aria-label="View photo ${idx + 1}">
+                                        <img src="${imgUrl}" alt="Photo ${idx + 1}" loading="lazy">
+                                    </button>
+                                `).join('')}
+                            </div>
+                        ` : ''}
                     </div>
 
                     <!-- RIGHT COLUMN: Details & Seller Box -->
@@ -346,6 +376,62 @@ export async function renderItemDetail(container, id) {
                 </div>
             </div>
         `;
+
+        // Interactive Gallery Controller for Multiple Photos
+        if (imagesList.length > 1) {
+            let activeImgIdx = 0;
+            const mainImg = document.getElementById('product-main-showcase-img');
+            const counterIdx = document.getElementById('gallery-current-idx');
+            const thumbBtns = document.querySelectorAll('.product-thumb-btn');
+            const prevBtn = document.getElementById('gallery-prev-btn');
+            const nextBtn = document.getElementById('gallery-next-btn');
+
+            const setGalleryPhoto = (newIdx) => {
+                if (newIdx < 0) newIdx = imagesList.length - 1;
+                if (newIdx >= imagesList.length) newIdx = 0;
+                activeImgIdx = newIdx;
+
+                if (mainImg) {
+                    mainImg.style.transition = 'opacity 0.15s ease';
+                    mainImg.style.opacity = '0.5';
+                    mainImg.src = imagesList[activeImgIdx];
+                    setTimeout(() => { if (mainImg) mainImg.style.opacity = '1'; }, 120);
+                }
+                if (counterIdx) {
+                    counterIdx.textContent = (activeImgIdx + 1);
+                }
+                thumbBtns.forEach((btn, idx) => {
+                    if (idx === activeImgIdx) {
+                        btn.classList.add('active');
+                        btn.scrollIntoView({ behavior: 'smooth', block: 'nearest', inline: 'center' });
+                    } else {
+                        btn.classList.remove('active');
+                    }
+                });
+            };
+
+            thumbBtns.forEach(btn => {
+                btn.addEventListener('click', (e) => {
+                    e.preventDefault();
+                    const idx = parseInt(btn.getAttribute('data-idx'), 10);
+                    if (!isNaN(idx)) setGalleryPhoto(idx);
+                });
+            });
+
+            if (prevBtn) {
+                prevBtn.addEventListener('click', (e) => {
+                    e.preventDefault();
+                    setGalleryPhoto(activeImgIdx - 1);
+                });
+            }
+
+            if (nextBtn) {
+                nextBtn.addEventListener('click', (e) => {
+                    e.preventDefault();
+                    setGalleryPhoto(activeImgIdx + 1);
+                });
+            }
+        }
 
         // Save Item Button (Wishlist Toggle)
         const saveBtn = document.getElementById('save-item-btn');
@@ -497,10 +583,18 @@ function renderSimilarItemsHTML(items) {
 
     return items.map(item => {
         const isSold = item.status === 'sold';
+        const coverImg = (Array.isArray(item.imageUrls) && item.imageUrls.length > 0)
+            ? item.imageUrls[0]
+            : (item.imageUrl || 'https://images.unsplash.com/photo-1544716278-ca5e3f4abd8c?auto=format&fit=crop&w=600&h=450&q=80');
+        const multiImgBadge = (Array.isArray(item.imageUrls) && item.imageUrls.length > 1)
+            ? `<span class="card-multi-img-badge"><i class="fa-solid fa-images"></i> ${item.imageUrls.length}</span>`
+            : '';
+
         return `
             <div class="product-card ecom-product-card shadow-card">
                 <div class="product-image-wrapper ecom-card-img-frame card-image-wrapper product-image-container">
-                    <img class="ecom-card-img product-image" src="${item.imageUrl || 'https://images.unsplash.com/photo-1544716278-ca5e3f4abd8c?auto=format&fit=crop&w=600&h=450&q=80'}" alt="${escapeHtml(item.title)}" loading="lazy" style="${isSold ? 'filter: grayscale(1) opacity(0.5);' : ''}">
+                    <img class="ecom-card-img product-image" src="${coverImg}" alt="${escapeHtml(item.title)}" loading="lazy" style="${isSold ? 'filter: grayscale(1) opacity(0.5);' : ''}">
+                    ${multiImgBadge}
                     ${isSold ? '<div class="ecom-sold-overlay">SOLD</div>' : ''}
                 </div>
                 <div class="product-card-details card-content ecom-card-body card-body product-details">

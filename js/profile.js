@@ -482,10 +482,18 @@ function renderListingsHTML(listings) {
 
     return listings.map(item => {
         const isSold = item.status === 'sold';
+        const coverImg = (Array.isArray(item.imageUrls) && item.imageUrls.length > 0)
+            ? item.imageUrls[0]
+            : (item.imageUrl || 'https://images.unsplash.com/photo-1544716278-ca5e3f4abd8c?auto=format&fit=crop&w=600&h=450&q=80');
+        const multiImgBadge = (Array.isArray(item.imageUrls) && item.imageUrls.length > 1)
+            ? `<span class="card-multi-img-badge"><i class="fa-solid fa-images"></i> ${item.imageUrls.length}</span>`
+            : '';
+
         return `
             <div class="product-card ecom-product-card shadow-card" id="listing-${item.id}">
                 <div class="product-image-wrapper ecom-card-img-frame card-image-wrapper product-image-container">
-                    <img class="ecom-card-img product-image can-zoom" src="${item.imageUrl || 'https://images.unsplash.com/photo-1544716278-ca5e3f4abd8c?auto=format&fit=crop&w=600&h=450&q=80'}" alt="${item.title}" style="${isSold ? 'filter: grayscale(1) opacity(0.6);' : ''}" loading="lazy">
+                    <img class="ecom-card-img product-image can-zoom" src="${coverImg}" alt="${item.title}" style="${isSold ? 'filter: grayscale(1) opacity(0.6);' : ''}" loading="lazy">
+                    ${multiImgBadge}
                     ${isSold ? '<div class="ecom-sold-overlay">SOLD</div>' : ''}
                 </div>
                 <div class="product-card-details card-content ecom-card-body card-body product-details">
@@ -568,10 +576,18 @@ function renderWishlistHTML(items) {
 
     return items.map(item => {
         const isSold = item.status === 'sold';
+        const coverImg = (Array.isArray(item.imageUrls) && item.imageUrls.length > 0)
+            ? item.imageUrls[0]
+            : (item.imageUrl || 'https://images.unsplash.com/photo-1544716278-ca5e3f4abd8c?auto=format&fit=crop&w=600&h=450&q=80');
+        const multiImgBadge = (Array.isArray(item.imageUrls) && item.imageUrls.length > 1)
+            ? `<span class="card-multi-img-badge"><i class="fa-solid fa-images"></i> ${item.imageUrls.length}</span>`
+            : '';
+
         return `
             <div class="product-card ecom-product-card shadow-card" id="saved-item-${item.id}">
                 <div class="product-image-wrapper ecom-card-img-frame card-image-wrapper product-image-container">
-                    <img class="ecom-card-img product-image" src="${item.imageUrl || 'https://images.unsplash.com/photo-1544716278-ca5e3f4abd8c?auto=format&fit=crop&w=600&h=450&q=80'}" alt="${item.title}" style="${isSold ? 'filter: grayscale(1) opacity(0.6);' : ''}" loading="lazy">
+                    <img class="ecom-card-img product-image" src="${coverImg}" alt="${item.title}" style="${isSold ? 'filter: grayscale(1) opacity(0.6);' : ''}" loading="lazy">
+                    ${multiImgBadge}
                     <button type="button" class="ecom-wishlist-btn active remove-wishlist-btn" data-id="${item.id}" aria-label="Remove from saved" title="Remove from saved">
                         <i class="fa-solid fa-heart"></i>
                     </button>
